@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="robots" content="noindex,nofollow,noarchive">
-  <title>たまき青空グループ 月次経営</title>
+  <title>たまき青空病院グループ 月次経営会議</title>
   <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
   <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
   <link rel="stylesheet" href="assets/style.css">
@@ -15,13 +15,13 @@
 <section id="page-login" class="page active">
   <div class="login-card">
     <img src="assets/logo.png" alt="logo" class="logo">
-    <h1>たまき青空グループ<br>月次経営</h1>
-    <form id="login-form" autocomplete="off">
+    <h1>たまき青空病院グループ<br>月次経営会議</h1>
+    <form id="login-form" method="post" action="#" autocomplete="on">
       <label>ID
-        <input type="text" id="login-id" autocomplete="off" autocapitalize="none" spellcheck="false" required>
+        <input type="text" id="login-id" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required>
       </label>
       <label>パスワード
-        <input type="password" id="login-pw" autocomplete="off" required>
+        <input type="password" id="login-pw" name="password" autocomplete="current-password" required>
       </label>
       <button type="submit">ログイン</button>
       <p id="login-error" class="error"></p>
@@ -32,7 +32,7 @@
 <!-- 法人選択 -->
 <section id="page-houjin" class="page">
   <header class="topbar topbar-light">
-    <span class="brand brand-light"><img src="assets/logo.png" alt=""> たまき青空グループ</span>
+    <span class="brand brand-light"><img src="assets/logo.png" alt=""> たまき青空病院グループ</span>
     <button id="logout" class="link-btn link-btn-light">ログアウト</button>
   </header>
   <main class="houjin-wrap">
