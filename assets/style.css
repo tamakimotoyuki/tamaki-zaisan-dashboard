@@ -242,23 +242,23 @@ body {
 }
 .dashboard-charts {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
 }
 .dashboard-chart {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 .dashboard-chart-title {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--text-sub);
   text-align: center;
 }
 .dashboard-chart-canvas {
   position: relative;
-  height: 180px;
+  height: 320px;
   width: 100%;
 }
 .dashboard-chart-empty {
@@ -269,7 +269,7 @@ body {
 }
 @media (max-width: 900px) {
   .dashboard-charts { grid-template-columns: 1fr; }
-  .dashboard-chart-canvas { height: 220px; }
+  .dashboard-chart-canvas { height: 260px; }
 }
 
 /* ---------- ダッシュボード ---------- */

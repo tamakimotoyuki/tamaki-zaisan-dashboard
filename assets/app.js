@@ -279,6 +279,13 @@ function bindHoujinButtons() {
     renderGlobalDashboard();
     showPage("page-global-dashboard");
   });
+  // ダッシュボード単月/累積トグル
+  document.querySelectorAll('input[name="dashboard-mode"]').forEach(r => {
+    r.addEventListener("change", (e) => {
+      dashboardMode = e.target.value;
+      renderGlobalDashboard();
+    });
+  });
   document.getElementById("back-to-houjin-from-dashboard").addEventListener("click", () => {
     destroyDashboardCharts();
     showPage("page-houjin");
@@ -430,7 +437,7 @@ function renderChartAndTable() {
 }
 
 // ---------- 横断ダッシュボード ----------
-// 5法人 × 3項目（経常利益・メイン収益・給与費）= 15グラフ
+// 5法人 × 2項目（経常利益・メイン収益）= 10グラフ
 const DASHBOARD_SECTIONS = [
   {
     title: "①【統合】明和会＋MS",
@@ -438,7 +445,6 @@ const DASHBOARD_SECTIONS = [
     items: {
       "経常利益": ["経常利益（明和会+MS）", "経常利益", "経常損益"],
       "医業収益": ["明和会医業収入＋MS 売上高", "医業収益（全体）", "医業収益", "事業収益合計", "売上高"],
-      "給与費":   ["給与費（明和会＋MS）", "給与費", "給与費合計", "人件費"],
     },
   },
   {
@@ -447,7 +453,6 @@ const DASHBOARD_SECTIONS = [
     items: {
       "経常利益": ["経常利益", "経常損益"],
       "医業収益": ["医業収益（全体）", "医業収益", "医療収益", "事業収益合計"],
-      "給与費":   ["給与費", "給与費合計", "人件費"],
     },
   },
   {
@@ -456,7 +461,6 @@ const DASHBOARD_SECTIONS = [
     items: {
       "経常利益": ["経常利益", "経常損益"],
       "売上高":   ["売上高", "純売上高"],
-      "人件費":   ["人件費", "給与費合計", "給与費"],
     },
   },
   {
@@ -465,7 +469,6 @@ const DASHBOARD_SECTIONS = [
     items: {
       "経常利益": ["経常損益", "経常利益"],
       "事業収益": ["事業収益合計", "医業収益", "医療収益"],
-      "給与費":   ["給与費合計", "給与費"],
     },
   },
   {
@@ -474,10 +477,11 @@ const DASHBOARD_SECTIONS = [
     items: {
       "経常利益": ["経常利益", "経常損益"],
       "サービス活動収益": ["サービス活動収益", "事業収益合計"],
-      "人件費":   ["人件費", "給与費合計", "給与費"],
     },
   },
 ];
+
+let dashboardMode = "monthly"; // monthly | cumulative
 
 const dashboardCharts = [];  // Chart instance管理
 
@@ -546,7 +550,7 @@ function renderGlobalDashboard() {
       const total = years.length;
       const datasets = years.map((y, idx) => ({
         label: yearLabelDisplay(y),
-        data: monthArray(block[y]),
+        data: dashboardMode === "cumulative" ? cumulative(monthArray(block[y])) : monthArray(block[y]),
         backgroundColor: yearColor(idx, total),
         borderColor: yearColor(idx, total),
         borderWidth: 1,

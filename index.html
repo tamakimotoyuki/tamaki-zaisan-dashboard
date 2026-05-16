@@ -75,6 +75,12 @@
     <button id="logout-dashboard" class="link-btn link-btn-light">ログアウト</button>
   </header>
   <main class="dashboard-wrap">
+    <div class="chart-toggle-wrap">
+      <div class="chart-toggle">
+        <label><input type="radio" name="dashboard-mode" value="monthly" checked>単月</label>
+        <label><input type="radio" name="dashboard-mode" value="cumulative">累積</label>
+      </div>
+    </div>
     <div id="dashboard-grid"></div>
   </main>
 </section>
