@@ -193,6 +193,84 @@ body {
   .houjin-grid { grid-template-columns: 1fr; }
 }
 
+/* ダッシュボードを開くプライマリボタン（4タイル下の横長） */
+.houjin-primary-btn {
+  width: 100%;
+  margin-top: 16px;
+  padding: 22px;
+  background: var(--primary);
+  border: none;
+  border-radius: 12px;
+  color: #fff;
+  font-size: 19px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0,104,196,0.15);
+  transition: background .12s, transform .1s, box-shadow .15s;
+  letter-spacing: 0.04em;
+}
+.houjin-primary-btn:hover {
+  background: var(--primary-dark);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(0,104,196,0.25);
+}
+
+/* ダッシュボードページ */
+#page-global-dashboard { background: var(--bg-soft); min-height: 100svh; }
+.dashboard-wrap {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 20px 16px 80px;
+}
+#dashboard-grid { display: flex; flex-direction: column; gap: 24px; }
+.dashboard-section {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 20px 20px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+.dashboard-section h2 {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--primary);
+  margin: 0 0 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.dashboard-charts {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+.dashboard-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.dashboard-chart-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-sub);
+  text-align: center;
+}
+.dashboard-chart-canvas {
+  position: relative;
+  height: 180px;
+  width: 100%;
+}
+.dashboard-chart-empty {
+  color: var(--text-sub);
+  font-size: 12px;
+  text-align: center;
+  padding: 60px 0;
+}
+@media (max-width: 900px) {
+  .dashboard-charts { grid-template-columns: 1fr; }
+  .dashboard-chart-canvas { height: 220px; }
+}
+
 /* ---------- ダッシュボード ---------- */
 .tab-row {
   display: flex;

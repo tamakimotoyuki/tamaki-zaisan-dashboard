@@ -5,6 +5,11 @@
 const DATA_URL = "data/ground_truth_v1.json";
 const MONTH_LABELS = ["4月","5月","6月","7月","8月","9月","10月","11月","12月","1月","2月","3月"];
 
+// ダッシュボードでのみ使うシート（通常の施設タブからは非表示）
+const DASHBOARD_ONLY_SHEETS = new Set([
+  "【自動】 統合)明和会+MS",
+]);
+
 // 法人 → 所属シート（xlsx 並び順）
 const HOUJIN_SHEETS = {
   meiwakai: [
@@ -269,6 +274,19 @@ function bindHoujinButtons() {
   document.getElementById("back-to-houjin").addEventListener("click", () => {
     showPage("page-houjin");
   });
+  // ダッシュボード起動
+  document.getElementById("open-dashboard").addEventListener("click", () => {
+    renderGlobalDashboard();
+    showPage("page-global-dashboard");
+  });
+  document.getElementById("back-to-houjin-from-dashboard").addEventListener("click", () => {
+    destroyDashboardCharts();
+    showPage("page-houjin");
+  });
+  document.getElementById("logout-dashboard").addEventListener("click", () => {
+    destroyDashboardCharts();
+    logout();
+  });
 }
 
 function enterHoujin(houjin) {
@@ -278,7 +296,7 @@ function enterHoujin(houjin) {
   document.getElementById("houjin-name").textContent = HOUJIN_LABELS[houjin];
   renderShisetsuTabs();
   // 最初の施設を選択
-  const sheets = HOUJIN_SHEETS[houjin].filter(s => state.data.sheets[s]);
+  const sheets = HOUJIN_SHEETS[houjin].filter(s => state.data.sheets[s] && !DASHBOARD_ONLY_SHEETS.has(s));
   if (sheets.length) selectShisetsu(sheets[0]);
   showPage("page-dashboard");
 }
@@ -286,7 +304,7 @@ function enterHoujin(houjin) {
 function renderShisetsuTabs() {
   const wrap = document.getElementById("shisetsu-tabs");
   wrap.innerHTML = "";
-  const sheets = HOUJIN_SHEETS[state.houjin].filter(s => state.data.sheets[s]);
+  const sheets = HOUJIN_SHEETS[state.houjin].filter(s => state.data.sheets[s] && !DASHBOARD_ONLY_SHEETS.has(s));
   sheets.forEach(s => {
     const btn = document.createElement("button");
     btn.className = "tab";
@@ -409,6 +427,153 @@ function renderChartAndTable() {
   });
   html += "</tbody>";
   table.innerHTML = html;
+}
+
+// ---------- 横断ダッシュボード ----------
+// 5法人 × 3項目（経常利益・メイン収益・給与費）= 15グラフ
+const DASHBOARD_SECTIONS = [
+  {
+    title: "①【統合】明和会＋MS",
+    sheet: "【自動】 統合)明和会+MS",
+    items: {
+      "経常利益": ["経常利益（明和会+MS）", "経常利益", "経常損益"],
+      "医業収益": ["明和会医業収入＋MS 売上高", "医業収益（全体）", "医業収益", "事業収益合計", "売上高"],
+      "給与費":   ["給与費（明和会＋MS）", "給与費", "給与費合計", "人件費"],
+    },
+  },
+  {
+    title: "②（医）明和会",
+    sheet: "医）明和会　全体",
+    items: {
+      "経常利益": ["経常利益", "経常損益"],
+      "医業収益": ["医業収益（全体）", "医業収益", "医療収益", "事業収益合計"],
+      "給与費":   ["給与費", "給与費合計", "人件費"],
+    },
+  },
+  {
+    title: "③（有）たまきメディカルサポート",
+    sheet: "MS　全体",
+    items: {
+      "経常利益": ["経常利益", "経常損益"],
+      "売上高":   ["売上高", "純売上高"],
+      "人件費":   ["人件費", "給与費合計", "給与費"],
+    },
+  },
+  {
+    title: "④（医）メディエンス",
+    sheet: "メディエンス　全体",
+    items: {
+      "経常利益": ["経常損益", "経常利益"],
+      "事業収益": ["事業収益合計", "医業収益", "医療収益"],
+      "給与費":   ["給与費合計", "給与費"],
+    },
+  },
+  {
+    title: "⑤（社福）明和福祉会",
+    sheet: "社福　全体",
+    items: {
+      "経常利益": ["経常利益", "経常損益"],
+      "サービス活動収益": ["サービス活動収益", "事業収益合計"],
+      "人件費":   ["人件費", "給与費合計", "給与費"],
+    },
+  },
+];
+
+const dashboardCharts = [];  // Chart instance管理
+
+function findFirstItem(blocks, candidates) {
+  for (const k of candidates) if (blocks[k]) return k;
+  return null;
+}
+
+function destroyDashboardCharts() {
+  dashboardCharts.forEach(c => c && c.destroy());
+  dashboardCharts.length = 0;
+}
+
+function renderGlobalDashboard() {
+  const grid = document.getElementById("dashboard-grid");
+  grid.innerHTML = "";
+  destroyDashboardCharts();
+
+  for (const section of DASHBOARD_SECTIONS) {
+    const sheet = state.data.sheets[section.sheet];
+    const sec = document.createElement("section");
+    sec.className = "dashboard-section";
+    const h = document.createElement("h2");
+    h.textContent = section.title;
+    sec.appendChild(h);
+    const chartsDiv = document.createElement("div");
+    chartsDiv.className = "dashboard-charts";
+    sec.appendChild(chartsDiv);
+
+    for (const [label, candidates] of Object.entries(section.items)) {
+      const cdiv = document.createElement("div");
+      cdiv.className = "dashboard-chart";
+      const t = document.createElement("div");
+      t.className = "dashboard-chart-title";
+      t.textContent = label;
+      cdiv.appendChild(t);
+
+      if (!sheet) {
+        const e = document.createElement("div");
+        e.className = "dashboard-chart-empty";
+        e.textContent = "シートなし";
+        cdiv.appendChild(e);
+        chartsDiv.appendChild(cdiv);
+        continue;
+      }
+      const itemKey = findFirstItem(sheet.blocks, candidates);
+      if (!itemKey) {
+        const e = document.createElement("div");
+        e.className = "dashboard-chart-empty";
+        e.textContent = "データなし";
+        cdiv.appendChild(e);
+        chartsDiv.appendChild(cdiv);
+        continue;
+      }
+
+      const wrap = document.createElement("div");
+      wrap.className = "dashboard-chart-canvas";
+      const canvas = document.createElement("canvas");
+      wrap.appendChild(canvas);
+      cdiv.appendChild(wrap);
+      chartsDiv.appendChild(cdiv);
+
+      // データ準備
+      const block = sheet.blocks[itemKey];
+      const years = Object.keys(block).slice().sort((a, b) => yearOrderKey(b) - yearOrderKey(a));
+      const total = years.length;
+      const datasets = years.map((y, idx) => ({
+        label: yearLabelDisplay(y),
+        data: monthArray(block[y]),
+        backgroundColor: yearColor(idx, total),
+        borderColor: yearColor(idx, total),
+        borderWidth: 1,
+      }));
+      const c = new Chart(canvas.getContext("2d"), {
+        type: "bar",
+        data: { labels: MONTH_LABELS, datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: { label: (ctx) => `${ctx.dataset.label}: ${fmt(ctx.parsed.y)}` },
+            },
+          },
+          scales: {
+            x: { ticks: { font: { size: 9 } } },
+            y: { ticks: { font: { size: 9 }, callback: v => v.toLocaleString("ja-JP") } },
+          },
+        },
+      });
+      dashboardCharts.push(c);
+    }
+    grid.appendChild(sec);
+  }
 }
 
 // ---------- ログイン ----------
