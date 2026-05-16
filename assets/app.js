@@ -54,16 +54,18 @@ const HOUJIN_LABELS = {
   shafuku: "（社福）明和福祉会",
 };
 
-// 月次試算表（xlsx原本）の流儀: 経常利益を先頭に → 収益 → 費用 → 事業外 → 税引前/当期純
+// PL項目表示順 — 正本: 知見集/18_大項目マッピング表.md
+// 月次試算表.xlsx 病院シート準拠（経常利益を最上段に配置）
+// 全法人（明和会・MS・社福・メディエンス）でこの順序を統一適用
 const ITEM_ORDER = [
-  // ① 経常利益（最重要KPI・xlsxヘッダーの先頭）
+  // ① 経常利益（最上段・最重要KPI・xlsx R3）
   "経常利益",
   "経常損益",
   "明和会　経常利益",
   "MS　経常利益",
   "経常利益（明和会+MS）",
 
-  // ② メイン収益
+  // ② メイン収益（xlsx R41）
   "医業収益（全体）",
   "医業収益",
   "医療収益",
@@ -77,7 +79,7 @@ const ITEM_ORDER = [
   "MS 売上高(全体)",
   "明和会医業収入＋MS 売上高",
 
-  // ③ サブ収益（収益内訳）
+  // ③ サブ収益（収益内訳・xlsx R79〜R155）
   "(入院診療収益)",
   "(外来診療収益)",
   "(自費診療)",
@@ -96,7 +98,8 @@ const ITEM_ORDER = [
   "（介護保険事業収益）",
   "（障害福祉サービス等収益）",
 
-  // ④ 費用（知見集/18_大項目マッピング表.md 準拠：材料→委託→給与→経費→設備関係→減価償却）
+  // ④ 費用（xlsx R193→R268→R306→R344→R382→R420）
+  // 順序：材料費 → 委託費 → 給与費 → 経費合計 → 設備関係費 → 減価償却費
   "売上原価",
   "材料費合計",
   "材料費",
@@ -114,14 +117,22 @@ const ITEM_ORDER = [
   "設備関係費合計",
   "減価償却費",
 
-  // ⑤ 事業損益・事業外・最終損益
+  // ⑤ 事業損益（xlsx R458）
   "事業損益",
+
+  // ⑥ 事業外（xlsx R496→R534）
   "事業外収益",
   "事業外費用",
-  "税引前当期純損益",
+
+  // ⑦ 特別損益（xlsx R572→R610）
+  "特別利益",
+  "特別損失",
+
+  // ⑧ 最終（xlsx R648→R686）
   "税引前当期純利益",
-  "当期純損益",
+  "税引前当期純損益",
   "当期純利益",
+  "当期純損益",
 ];
 const ITEM_RANK = Object.fromEntries(ITEM_ORDER.map((k, i) => [k, i]));
 
@@ -132,6 +143,21 @@ function sortItems(items) {
     if (ra !== rb) return ra - rb;
     return a.localeCompare(b, "ja");
   });
+}
+
+// 項目名の表示整形
+// ① 後置修飾子「（全体）」削除
+// ② 文字列全体が(xxx)で囲まれたサブ収益 → "xxx (個別)" に変換（階層を後置で示す）
+// ③ 注釈(※)付き・補足括弧は触らない
+function displayItemName(name) {
+  if (!name) return name;
+  // 注釈付きはそのまま（「（介護報酬収益）※...」など）
+  if (name.includes("※")) return name;
+  // 文字列全体が括弧で囲まれているサブ収益 → 中身 + " (個別)"
+  const m = name.match(/^[（(](.+)[）)]$/);
+  if (m) return m[1] + " (個別)";
+  // 後置「（全体）」「(全体)」削除
+  return name.replace(/[（(]全体[）)]\s*$/, "").trim();
 }
 
 // 短い施設名表示
@@ -287,7 +313,8 @@ function renderKoumokuTabs() {
   sorted.forEach(k => {
     const btn = document.createElement("button");
     btn.className = "tab";
-    btn.textContent = k;
+    btn.textContent = displayItemName(k);
+    btn.title = k;
     btn.dataset.item = k;
     btn.addEventListener("click", () => selectKoumoku(k));
     wrap.appendChild(btn);
