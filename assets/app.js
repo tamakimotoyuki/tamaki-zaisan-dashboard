@@ -3,7 +3,26 @@
 // 構造: sheets[シート名].blocks[項目名][年度ラベル] = {"0": 4月値, ..., "11": 3月値}
 
 const DATA_URL = "data/ground_truth_v1.json";
-const MONTH_LABELS = ["4月","5月","6月","7月","8月","9月","10月","11月","12月","1月","2月","3月"];
+const MONTH_LABELS_APR = ["4月","5月","6月","7月","8月","9月","10月","11月","12月","1月","2月","3月"];
+const MONTH_LABELS_MAY = ["5月","6月","7月","8月","9月","10月","11月","12月","1月","2月","3月","4月"];
+
+// 年度ラベルから月開始を判定 (4=4月始まり医療法人系, 5=5月始まりMS)
+function detectMonthStart(yearLabel) {
+  if (/^\d+\.5-\d+\.4$/.test(yearLabel)) return 5;
+  return 4;
+}
+function getMonthLabels(monthStart) {
+  return monthStart === 5 ? MONTH_LABELS_MAY : MONTH_LABELS_APR;
+}
+// シート全体の月開始を判定（最初の年度ラベルから）
+function detectSheetMonthStart(sheet) {
+  if (!sheet || !sheet.blocks) return 4;
+  for (const item of Object.values(sheet.blocks)) {
+    const yrs = Object.keys(item);
+    if (yrs.length) return detectMonthStart(yrs[0]);
+  }
+  return 4;
+}
 
 // ダッシュボードでのみ使うシート（通常の施設タブからは非表示）
 const DASHBOARD_ONLY_SHEETS = new Set([
@@ -388,6 +407,10 @@ function renderChartAndTable() {
   const useMode = state.mode;
   const dataSeries = matrix.map(row => useMode === "cumulative" ? cumulative(row.values) : row.values);
 
+  // 月ラベル（シートの年度ラベルから5月始まり/4月始まりを判定）
+  const monthStart = detectSheetMonthStart(state.data.sheets[state.shisetsu]);
+  const monthLabels = getMonthLabels(monthStart);
+
   // ---------- グラフ ----------
   const ctx = document.getElementById("main-chart").getContext("2d");
   if (state.chart) state.chart.destroy();
@@ -403,7 +426,7 @@ function renderChartAndTable() {
 
   state.chart = new Chart(ctx, {
     type: "bar",
-    data: { labels: MONTH_LABELS, datasets },
+    data: { labels: monthLabels, datasets },
     options: {
       responsive: true,
       maintainAspectRatio: false,
@@ -432,7 +455,7 @@ function renderChartAndTable() {
   // ---------- 表 ----------
   const table = document.getElementById("main-table");
   let html = "<thead><tr><th>年度</th>";
-  for (const m of MONTH_LABELS) html += `<th>${m}</th>`;
+  for (const m of monthLabels) html += `<th>${m}</th>`;
   html += `<th class="total">${useMode === "cumulative" ? "累計" : "金額"}</th></tr></thead><tbody>`;
   matrix.forEach((row, i) => {
     const values = dataSeries[i];
@@ -567,9 +590,12 @@ function renderGlobalDashboard() {
         borderColor: yearColor(idx, total),
         borderWidth: 1,
       }));
+      // 月ラベル: このシート/グラフ用に判定
+      const sheetMonthStart = detectSheetMonthStart(sheet);
+      const sheetMonthLabels = getMonthLabels(sheetMonthStart);
       const c = new Chart(canvas.getContext("2d"), {
         type: "bar",
-        data: { labels: MONTH_LABELS, datasets },
+        data: { labels: sheetMonthLabels, datasets },
         options: {
           responsive: true,
           maintainAspectRatio: false,
