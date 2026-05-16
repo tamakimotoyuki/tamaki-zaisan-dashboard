@@ -16,13 +16,21 @@
   <div class="login-card">
     <img src="assets/logo.png" alt="logo" class="logo">
     <h1>たまき青空病院グループ<br>月次経営会議</h1>
-    <form id="login-form" method="post" action="#" autocomplete="on">
-      <label>ID
-        <input type="text" id="login-id" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required>
-      </label>
-      <label>パスワード
-        <input type="password" id="login-pw" name="password" autocomplete="current-password" required>
-      </label>
+    <form id="login-form" method="post" action="#" autocomplete="on" data-form-type="login">
+      <label for="login-id">ID</label>
+      <input type="text" id="login-id" name="username"
+             autocomplete="username"
+             autocapitalize="none"
+             autocorrect="off"
+             spellcheck="false"
+             inputmode="text"
+             placeholder="ID"
+             required>
+      <label for="login-pw">パスワード</label>
+      <input type="password" id="login-pw" name="password"
+             autocomplete="current-password"
+             placeholder="パスワード"
+             required>
       <button type="submit">ログイン</button>
       <p id="login-error" class="error"></p>
     </form>
