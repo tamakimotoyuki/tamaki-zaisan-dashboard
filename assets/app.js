@@ -181,30 +181,42 @@ function shortShisetsuName(s) {
     .replace(/^メディエンス　/, "");
 }
 
-// 年度ラベル → 表示用 (例: "7.4-8.3" → "R7")
+// 年度ラベル → 表示用
+// 4-3パターン: 医療法人(明和会・メディエンス・社福) - 4月始まり3月終わり → "R7" 等
+// 5-4パターン: MS(株式会社) - 5月始まり4月終わり → "FY7" 等
 function yearLabelDisplay(label) {
-  const m = label.match(/^(\d+)\.4-(\d+)\.3$/);
-  if (!m) return label;
-  const start = parseInt(m[1]);
-  // 25-30はH(平成)、31以降は迷うが当院運用は31=H31、それ以降32+はR(令和)に
-  // しかし試算表ではR1=元年=2019年なので：H25-H31 (2013-2019), R1-R7 (2019-2025)
-  // 32.4-33.3 などはないので、>=32 → R(start-31)、<32 → そのまま和暦数値
-  if (start >= 25 && start <= 31) return `H${start}`;
-  return `R${start}`;
+  let m = label.match(/^(\d+)\.4-(\d+)\.3$/);
+  if (m) {
+    const start = parseInt(m[1]);
+    if (start >= 25 && start <= 31) return `H${start}`;
+    return `R${start}`;
+  }
+  m = label.match(/^(\d+)\.5-(\d+)\.4$/);
+  if (m) {
+    const start = parseInt(m[1]);
+    if (start >= 25 && start <= 31) return `H${start}`;
+    return `R${start}`;  // MSもR表記で統一（FYと違うので注意）
+  }
+  return label;
 }
 
 // 年度数値（古い→新しいで増える）。並び替え用
 function yearOrderKey(label) {
-  // "7.4-8.3" → 開始年(令和ベース→2019+7=2026), "31.4-2.3" → H31=2019, "2.4-3.3" → R2=2020
-  const m = label.match(/^(\d+)\.4-(\d+)\.3$/);
-  if (!m) return 0;
-  const start = parseInt(m[1]);
-  const end = parseInt(m[2]);
-  // start=25..31 は平成 (西暦= start+1988)
-  // start=1..30 で end<start は令和 (start=1なら2019,2なら2020,...,7なら2025)
-  // start=31,end=2 のような跨ぎは H31 (2019)
-  if (start >= 25 && start <= 31) return 1988 + start; // 平成
-  return 2018 + start; // 令和
+  // 4-3 (医療法人): start=25-31 平成, それ以外は令和
+  let m = label.match(/^(\d+)\.4-(\d+)\.3$/);
+  if (m) {
+    const start = parseInt(m[1]);
+    if (start >= 25 && start <= 31) return 1988 + start;
+    return 2018 + start;
+  }
+  // 5-4 (MS) も同じく令和ベース。5月始まりなので少しずらす
+  m = label.match(/^(\d+)\.5-(\d+)\.4$/);
+  if (m) {
+    const start = parseInt(m[1]);
+    if (start >= 25 && start <= 31) return 1988 + start + 0.1;
+    return 2018 + start + 0.1;  // 同年4-3の直後に並ぶよう微オフセット
+  }
+  return 0;
 }
 
 // 色生成（新しい年=濃い青、古い年=淡い青）
