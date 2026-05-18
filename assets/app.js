@@ -1,8 +1,8 @@
 // 月次経営ダッシュボード メインアプリ
-// データ: data/ground_truth_v1.json
+// データ: data/大項目.json
 // 構造: sheets[シート名].blocks[項目名][年度ラベル] = {"0": 4月値, ..., "11": 3月値}
 
-const DATA_URL = "data/ground_truth_v1.json";
+const DATA_URL = "data/大項目.json";
 const MONTH_LABELS_APR = ["4月","5月","6月","7月","8月","9月","10月","11月","12月","1月","2月","3月"];
 const MONTH_LABELS_MAY = ["5月","6月","7月","8月","9月","10月","11月","12月","1月","2月","3月","4月"];
 
