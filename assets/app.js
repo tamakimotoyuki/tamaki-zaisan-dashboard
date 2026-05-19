@@ -599,6 +599,52 @@ const DASHBOARD_SECTIONS = [
     },
     splitByHoujin: ["有形固定資産（簿価）"],
   },
+  // 減価償却費推移 - 法人別4チャート分割（PL年度合計）
+  {
+    title: "⑩減価償却費推移（4法人別PL・年度合計）",
+    isPL: true,
+    houjinSheets: {
+      "（医）明和会": "医）明和会　全体",
+      "（医）メディエンス": "メディエンス　全体",
+      "MS": "MS　全体",
+      "（社福）明和福祉会": "社福　全体",
+    },
+    items: {
+      "減価償却費": ["減価償却費"],
+    },
+  },
+  // 簡易営業CF (経常利益 + 減価償却費) - 法人別4チャート・スタック
+  {
+    title: "⑪簡易営業CF推移（経常利益+減価償却費・法人別年度合計）",
+    isStackedPL: true,
+    houjinSheets: {
+      "（医）明和会": "医）明和会　全体",
+      "（医）メディエンス": "メディエンス　全体",
+      "MS": "MS　全体",
+      "（社福）明和福祉会": "社福　全体",
+    },
+    stackItems: [
+      { label: "経常利益", candidates: ["経常利益", "経常損益"] },
+      { label: "減価償却費", candidates: ["減価償却費"] },
+    ],
+  },
+  // 簡易キャッシュフロー (営業/投資/財務) - 法人別4チャート
+  {
+    title: "⑫簡易キャッシュフロー推移（営業/投資/財務・年度概算）",
+    isCF: true,
+    houjinPlSheets: {
+      "（医）明和会": "医）明和会　全体",
+      "（医）メディエンス": "メディエンス　全体",
+      "MS": "MS　全体",
+      "（社福）明和福祉会": "社福　全体",
+    },
+    houjinBsSheets: {
+      "（医）明和会": "医）明和会　全体(BS)",
+      "（医）メディエンス": "メディエンス　全体(BS)",
+      "MS": "MS　全体(BS)",
+      "（社福）明和福祉会": "社福　全体(BS)",
+    },
+  },
 ];
 
 let dashboardMode = "monthly"; // monthly | cumulative
@@ -624,6 +670,18 @@ function renderGlobalDashboard() {
     // BSセクション専用処理 (4法人横断・純資産/現預金推移)
     if (section.isBS) {
       renderBSDashboardSection(grid, section);
+      continue;
+    }
+    if (section.isPL) {
+      renderPLAnnualSection(grid, section);
+      continue;
+    }
+    if (section.isStackedPL) {
+      renderStackedPLSection(grid, section);
+      continue;
+    }
+    if (section.isCF) {
+      renderCFSection(grid, section);
       continue;
     }
     const sheet = state.data.sheets[section.sheet];
@@ -887,6 +945,300 @@ function renderBSDashboardSection(grid, section) {
     });
     dashboardCharts.push(c);
   }
+  grid.appendChild(sec);
+}
+
+// ---------- PL年度合計ヘルパー ----------
+function annualSumFromBlock(block, year) {
+  const months = block?.[year] || {};
+  const keys = Object.keys(months).filter(k => /^\d+$/.test(k));
+  if (keys.length === 0) return null;
+  let sum = 0;
+  let any = false;
+  for (const k of keys) {
+    if (typeof months[k] === "number") { sum += months[k]; any = true; }
+  }
+  return any ? sum : null;
+}
+function yearEndFromBlock(block, year) {
+  const months = block?.[year] || {};
+  const keys = Object.keys(months).filter(k => /^\d+$/.test(k));
+  if (keys.length === 0) return null;
+  const maxKey = Math.max(...keys.map(Number));
+  const v = months[String(maxKey)];
+  return typeof v === "number" ? v : null;
+}
+function extractHoujinAnnualSum(houjinSheets, candidates) {
+  // returns {houjinLabel -> {year -> annualSum}}, allYears Set
+  const result = {};
+  const allYears = new Set();
+  for (const [hLabel, sheetName] of Object.entries(houjinSheets)) {
+    const sheet = state.data.sheets[sheetName];
+    result[hLabel] = {};
+    if (!sheet?.blocks) continue;
+    const key = findFirstItem(sheet.blocks, candidates);
+    if (!key) continue;
+    const block = sheet.blocks[key];
+    for (const y of Object.keys(block)) {
+      const v = annualSumFromBlock(block, y);
+      if (v !== null) { result[hLabel][y] = v; allYears.add(y); }
+    }
+  }
+  return { result, allYears };
+}
+function extractHoujinYearEnd(bsSheets, itemKey) {
+  const result = {};
+  const allYears = new Set();
+  for (const [hLabel, sheetName] of Object.entries(bsSheets)) {
+    const sheet = state.data.sheets[sheetName];
+    result[hLabel] = {};
+    if (!sheet?.blocks?.[itemKey]) continue;
+    const block = sheet.blocks[itemKey];
+    for (const y of Object.keys(block)) {
+      const v = yearEndFromBlock(block, y);
+      if (v !== null) { result[hLabel][y] = v; allYears.add(y); }
+    }
+  }
+  return { result, allYears };
+}
+
+// ---------- ⑩ PL年度合計セクション (法人別4チャート) ----------
+function renderPLAnnualSection(grid, section) {
+  const sec = document.createElement("section");
+  sec.className = "dashboard-section";
+  const h = document.createElement("h2");
+  h.textContent = section.title;
+  sec.appendChild(h);
+  const chartsDiv = document.createElement("div");
+  chartsDiv.className = "dashboard-charts";
+  sec.appendChild(chartsDiv);
+
+  const houjinLabels = Object.keys(section.houjinSheets);
+  for (const [label, candidates] of Object.entries(section.items)) {
+    const { result, allYears } = extractHoujinAnnualSum(section.houjinSheets, candidates);
+    const sortedYears = Array.from(allYears).sort((a, b) => yearOrderKey(a) - yearOrderKey(b));
+    const yearDisplays = sortedYears.map(y => yearLabelDisplay(y));
+
+    houjinLabels.forEach((hLabel, idx) => {
+      const cdiv = document.createElement("div");
+      cdiv.className = "dashboard-chart";
+      const t = document.createElement("div");
+      t.className = "dashboard-chart-title";
+      t.textContent = `${label} - ${hLabel}（年度合計）`;
+      cdiv.appendChild(t);
+      const wrap = document.createElement("div");
+      wrap.className = "dashboard-chart-canvas";
+      const canvas = document.createElement("canvas");
+      wrap.appendChild(canvas);
+      cdiv.appendChild(wrap);
+      chartsDiv.appendChild(cdiv);
+
+      const data = sortedYears.map(y => result[hLabel]?.[y] ?? null);
+      if (data.every(v => v === null)) {
+        const e = document.createElement("div");
+        e.className = "dashboard-chart-empty";
+        e.textContent = "PLデータなし";
+        cdiv.appendChild(e);
+        return;
+      }
+      const color = yearColor(idx, houjinLabels.length);
+      const c = new Chart(canvas.getContext("2d"), {
+        type: "bar",
+        data: { labels: yearDisplays, datasets: [{ label: hLabel, data, backgroundColor: color, borderColor: color, borderWidth: 1 }] },
+        options: {
+          responsive: true, maintainAspectRatio: false, animation: false,
+          plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${fmt(ctx.parsed.y)}` } } },
+          scales: { x: { ticks: { font: { size: 10 } } }, y: { ticks: { font: { size: 9 }, callback: v => v.toLocaleString("ja-JP") } } },
+        },
+      });
+      dashboardCharts.push(c);
+    });
+  }
+  grid.appendChild(sec);
+}
+
+// ---------- ⑪ 経常利益+減価償却費 スタック (法人別4チャート) ----------
+function renderStackedPLSection(grid, section) {
+  const sec = document.createElement("section");
+  sec.className = "dashboard-section";
+  const h = document.createElement("h2");
+  h.textContent = section.title;
+  sec.appendChild(h);
+  const chartsDiv = document.createElement("div");
+  chartsDiv.className = "dashboard-charts";
+  sec.appendChild(chartsDiv);
+
+  // 各stackItemを法人別に年度合計化
+  const stackData = section.stackItems.map(item => extractHoujinAnnualSum(section.houjinSheets, item.candidates));
+  const allYears = new Set();
+  stackData.forEach(s => s.allYears.forEach(y => allYears.add(y)));
+  const sortedYears = Array.from(allYears).sort((a, b) => yearOrderKey(a) - yearOrderKey(b));
+  const yearDisplays = sortedYears.map(y => yearLabelDisplay(y));
+
+  const houjinLabels = Object.keys(section.houjinSheets);
+  houjinLabels.forEach((hLabel, idx) => {
+    const cdiv = document.createElement("div");
+    cdiv.className = "dashboard-chart";
+    const t = document.createElement("div");
+    t.className = "dashboard-chart-title";
+    t.textContent = `${hLabel} - 経常利益+減価償却費（年度合計）`;
+    cdiv.appendChild(t);
+    const wrap = document.createElement("div");
+    wrap.className = "dashboard-chart-canvas";
+    const canvas = document.createElement("canvas");
+    wrap.appendChild(canvas);
+    cdiv.appendChild(wrap);
+    chartsDiv.appendChild(cdiv);
+
+    const datasets = section.stackItems.map((item, i) => {
+      const color = yearColor(i, section.stackItems.length);
+      return {
+        label: item.label,
+        data: sortedYears.map(y => stackData[i].result[hLabel]?.[y] ?? null),
+        backgroundColor: color,
+        borderColor: color,
+        borderWidth: 1,
+        stack: "cf",
+      };
+    });
+
+    if (datasets.every(d => d.data.every(v => v === null))) {
+      const e = document.createElement("div");
+      e.className = "dashboard-chart-empty";
+      e.textContent = "PLデータなし";
+      cdiv.appendChild(e);
+      return;
+    }
+
+    const c = new Chart(canvas.getContext("2d"), {
+      type: "bar",
+      data: { labels: yearDisplays, datasets },
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: false,
+        plugins: {
+          legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } },
+          tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${fmt(ctx.parsed.y)}` } },
+        },
+        scales: {
+          x: { stacked: true, ticks: { font: { size: 10 } } },
+          y: { stacked: true, ticks: { font: { size: 9 }, callback: v => v.toLocaleString("ja-JP") } },
+        },
+      },
+    });
+    dashboardCharts.push(c);
+  });
+  grid.appendChild(sec);
+}
+
+// ---------- ⑫ 簡易キャッシュフロー (営業/投資/財務) ----------
+// 営業CF = 経常利益 + 減価償却費 (簡易・運転資本変動は無視)
+// 投資CF = -(Δ有形固定資産簿価 + 減価償却費) = -CAPEX
+// 財務CF = Δ長期借入金 + Δ短期借入金
+function renderCFSection(grid, section) {
+  const sec = document.createElement("section");
+  sec.className = "dashboard-section";
+  const h = document.createElement("h2");
+  h.textContent = section.title;
+  sec.appendChild(h);
+
+  // 注記
+  const note = document.createElement("p");
+  note.style.cssText = "color:#666;font-size:11px;margin:4px 0 8px;";
+  note.textContent = "※簡易計算 (運転資本変動・除却影響は無視)。営業CF=経常利益+減価償却費 / 投資CF=-(Δ有形固定資産+減価償却費) / 財務CF=Δ長期借入金+Δ短期借入金。";
+  sec.appendChild(note);
+
+  const chartsDiv = document.createElement("div");
+  chartsDiv.className = "dashboard-charts";
+  sec.appendChild(chartsDiv);
+
+  // PL: 経常利益・減価償却費
+  const keijo = extractHoujinAnnualSum(section.houjinPlSheets, ["経常利益", "経常損益"]);
+  const genka = extractHoujinAnnualSum(section.houjinPlSheets, ["減価償却費"]);
+  // BS: 有形固定資産・長期借入金・短期借入金
+  const bvAsset = extractHoujinYearEnd(section.houjinBsSheets, "有形固定資産（簿価）");
+  const longLoan = extractHoujinYearEnd(section.houjinBsSheets, "長期借入金");
+  const shortLoan = extractHoujinYearEnd(section.houjinBsSheets, "短期借入金");
+
+  const allYears = new Set();
+  [keijo, genka, bvAsset, longLoan, shortLoan].forEach(d => d.allYears.forEach(y => allYears.add(y)));
+  const sortedYears = Array.from(allYears).sort((a, b) => yearOrderKey(a) - yearOrderKey(b));
+  const yearDisplays = sortedYears.map(y => yearLabelDisplay(y));
+
+  const houjinLabels = Object.keys(section.houjinPlSheets);
+  houjinLabels.forEach((hLabel, idx) => {
+    const cdiv = document.createElement("div");
+    cdiv.className = "dashboard-chart";
+    const t = document.createElement("div");
+    t.className = "dashboard-chart-title";
+    t.textContent = `${hLabel} - 簡易CF（年度概算）`;
+    cdiv.appendChild(t);
+    const wrap = document.createElement("div");
+    wrap.className = "dashboard-chart-canvas";
+    const canvas = document.createElement("canvas");
+    wrap.appendChild(canvas);
+    cdiv.appendChild(wrap);
+    chartsDiv.appendChild(cdiv);
+
+    const opCF = [];
+    const invCF = [];
+    const finCF = [];
+    sortedYears.forEach((y, yi) => {
+      const prevY = yi > 0 ? sortedYears[yi - 1] : null;
+      const k = keijo.result[hLabel]?.[y];
+      const g = genka.result[hLabel]?.[y];
+      // 営業CF
+      opCF.push((typeof k === "number" && typeof g === "number") ? k + g : (typeof k === "number" ? k : null));
+
+      // 投資CF (前年比較必要)
+      if (prevY && typeof bvAsset.result[hLabel]?.[y] === "number" && typeof bvAsset.result[hLabel]?.[prevY] === "number") {
+        const dBV = bvAsset.result[hLabel][y] - bvAsset.result[hLabel][prevY];
+        const gv = typeof g === "number" ? g : 0;
+        invCF.push(-(dBV + gv));
+      } else invCF.push(null);
+
+      // 財務CF
+      if (prevY) {
+        let fin = 0;
+        let any = false;
+        const dL = (longLoan.result[hLabel]?.[y] ?? 0) - (longLoan.result[hLabel]?.[prevY] ?? 0);
+        const dS = (shortLoan.result[hLabel]?.[y] ?? 0) - (shortLoan.result[hLabel]?.[prevY] ?? 0);
+        if (typeof longLoan.result[hLabel]?.[y] === "number" || typeof longLoan.result[hLabel]?.[prevY] === "number") { fin += dL; any = true; }
+        if (typeof shortLoan.result[hLabel]?.[y] === "number" || typeof shortLoan.result[hLabel]?.[prevY] === "number") { fin += dS; any = true; }
+        finCF.push(any ? fin : null);
+      } else finCF.push(null);
+    });
+
+    const datasets = [
+      { label: "営業CF", data: opCF, backgroundColor: "rgba(46,134,193,0.85)", borderColor: "rgba(46,134,193,1)", borderWidth: 1 },
+      { label: "投資CF", data: invCF, backgroundColor: "rgba(231,76,60,0.75)", borderColor: "rgba(231,76,60,1)", borderWidth: 1 },
+      { label: "財務CF", data: finCF, backgroundColor: "rgba(241,196,15,0.85)", borderColor: "rgba(241,196,15,1)", borderWidth: 1 },
+    ];
+
+    if (datasets.every(d => d.data.every(v => v === null))) {
+      const e = document.createElement("div");
+      e.className = "dashboard-chart-empty";
+      e.textContent = "CF算出不可（データ不足）";
+      cdiv.appendChild(e);
+      return;
+    }
+
+    const c = new Chart(canvas.getContext("2d"), {
+      type: "bar",
+      data: { labels: yearDisplays, datasets },
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: false,
+        plugins: {
+          legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } },
+          tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${fmt(ctx.parsed.y)}` } },
+        },
+        scales: {
+          x: { ticks: { font: { size: 10 } } },
+          y: { ticks: { font: { size: 9 }, callback: v => v.toLocaleString("ja-JP") } },
+        },
+      },
+    });
+    dashboardCharts.push(c);
+  });
   grid.appendChild(sec);
 }
 
