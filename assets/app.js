@@ -615,7 +615,7 @@ const DASHBOARD_SECTIONS = [
   },
   // 簡易営業CF (経常利益 + 減価償却費) - 法人別4チャート・スタック
   {
-    title: "⑪簡易営業CF推移（経常利益+減価償却費・月次スタック・全期間）",
+    title: "⑪簡易営業CF推移（経常利益+減価償却費・月次・年度比較）",
     isStackedPL: true,
     houjinSheets: {
       "（医）明和会": "医）明和会　全体(PL)",
@@ -1159,15 +1159,15 @@ function renderStackedPLSection(grid, section) {
       const key = findFirstItem(sheet.blocks, item.candidates);
       return key ? sheet.blocks[key] : null;
     });
-    // 経常利益(必須)のある年度すべてを時系列で連結する
+    // 経常利益(必須)のある年度 (新→旧で年度色分け)
     const baseBlock = itemBlocks[0];
-    const allYears = baseBlock
-      ? dedupeYearsByDisplay(Object.keys(baseBlock)).slice().sort((a, b) => yearOrderKey(a) - yearOrderKey(b))
+    const years = baseBlock
+      ? dedupeYearsByDisplay(Object.keys(baseBlock)).slice().sort((a, b) => yearOrderKey(b) - yearOrderKey(a))
       : [];
 
-    t.textContent = `${hLabel} - 経常利益+減価償却費（月次・${allYears.length > 0 ? `${yearLabelDisplay(allYears[0])}〜${yearLabelDisplay(allYears[allYears.length - 1])}` : "?"}）`;
+    t.textContent = `${hLabel} - 経常利益+減価償却費（月次・年度色分け・減価償却=年合計÷12）`;
 
-    if (allYears.length === 0) {
+    if (years.length === 0) {
       const e = document.createElement("div");
       e.className = "dashboard-chart-empty";
       e.textContent = "PLデータなし";
@@ -1175,56 +1175,40 @@ function renderStackedPLSection(grid, section) {
       return;
     }
 
-    const monthStart = detectSheetMonthStart(sheet);
-    const monthsTpl = getMonthLabels(monthStart);
-
-    // 連結X軸ラベル ("R7 4月" 形式)
-    const xLabels = [];
-    allYears.forEach(y => {
-      const yDisp = yearLabelDisplay(y);
-      for (let m = 0; m < 12; m++) xLabels.push(`${yDisp} ${monthsTpl[m]}`);
-    });
-
-    const datasets = section.stackItems.map((item, i) => {
-      const block = itemBlocks[i];
-      const color = i === 0 ? "rgba(20,60,120,0.92)" : "rgba(120,170,220,0.85)";
-      const data = [];
-      allYears.forEach(y => {
-        const months = block?.[y];
-        if (!months) {
-          for (let m = 0; m < 12; m++) data.push(null);
-        } else if (item.evenDistribute) {
-          const annual = annualSumFromBlock(block, y);
-          const monthly = annual === null ? null : annual / 12;
-          for (let m = 0; m < 12; m++) data.push(monthly);
-        } else {
-          for (let m = 0; m < 12; m++) {
-            const v = months[String(m)];
-            data.push(typeof v === "number" ? v : null);
-          }
-        }
-      });
+    // 各年度 1データセット: 月ごとに 経常利益 + 減価償却÷12 の合算値
+    const total = years.length;
+    const datasets = years.map((y, idx) => {
+      const monthly = new Array(12).fill(null);
+      const keijoMonths = itemBlocks[0]?.[y] || {};
+      const genkaBlock = itemBlocks[1];
+      const genkaAnnual = genkaBlock ? annualSumFromBlock(genkaBlock, y) : null;
+      const genkaPerMonth = genkaAnnual === null ? 0 : genkaAnnual / 12;
+      for (let m = 0; m < 12; m++) {
+        const k = keijoMonths[String(m)];
+        if (typeof k === "number") monthly[m] = k + genkaPerMonth;
+      }
+      const color = yearColor(idx, total);
       return {
-        label: item.label + (item.evenDistribute ? "（年合計÷12）" : ""),
-        data,
+        label: yearLabelDisplay(y),
+        data: monthly,
         backgroundColor: color,
         borderColor: color,
         borderWidth: 1,
-        stack: "cf",
       };
     });
+    const monthLabels = getMonthLabels(detectSheetMonthStart(sheet));
     const c = new Chart(canvas.getContext("2d"), {
       type: "bar",
-      data: { labels: xLabels, datasets },
+      data: { labels: monthLabels, datasets },
       options: {
         responsive: true, maintainAspectRatio: false, animation: false,
         plugins: {
-          legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } },
+          legend: { position: "bottom", labels: { boxWidth: 10, font: { size: 10 } } },
           tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${fmt(ctx.parsed.y)}` } },
         },
         scales: {
-          x: { stacked: true, ticks: { font: { size: 8 }, maxRotation: 90, minRotation: 60, autoSkip: true, maxTicksLimit: 30 } },
-          y: { stacked: true, ticks: { font: { size: 9 }, callback: v => v.toLocaleString("ja-JP") } },
+          x: { ticks: { font: { size: 9 } } },
+          y: { ticks: { font: { size: 9 }, callback: v => v.toLocaleString("ja-JP") } },
         },
       },
     });
