@@ -550,9 +550,9 @@ const DASHBOARD_SECTIONS = [
     },
     splitByHoujin: ["純資産"],
   },
-  // 現預金推移 - 4法人重ね（流動性KPI）
+  // 現預金推移 - 法人別4チャート分割（流動性KPI）
   {
-    title: "⑦現預金推移（4法人BS・年度末残高）",
+    title: "⑦現預金推移（4法人別BS・年度末残高）",
     sheet: null,
     isBS: true,
     bsSheets: {
@@ -564,10 +564,11 @@ const DASHBOARD_SECTIONS = [
     items: {
       "現預金": "現預金",
     },
+    splitByHoujin: ["現預金"],
   },
-  // 借入金・固定資産推移 - 長期借入金は法人別分割、他は4法人重ね
+  // 借入金推移 - 長期借入金は法人別分割、短期借入金は4法人重ね
   {
-    title: "⑧借入金・固定資産推移（4法人BS・年度末残高）",
+    title: "⑧借入金推移（4法人BS・年度末残高）",
     sheet: null,
     isBS: true,
     bsSheets: {
@@ -579,9 +580,23 @@ const DASHBOARD_SECTIONS = [
     items: {
       "短期借入金": "短期借入金",
       "長期借入金": "長期借入金",
-      "有形固定資産（簿価）": "有形固定資産（簿価）",
     },
     splitByHoujin: ["長期借入金"],
+  },
+  // 有形固定資産推移 - 4法人重ね（設備投資の累計）
+  {
+    title: "⑨有形固定資産推移（4法人BS・年度末残高）",
+    sheet: null,
+    isBS: true,
+    bsSheets: {
+      "（医）明和会": "医）明和会　全体(BS)",
+      "（医）メディエンス": "メディエンス　全体(BS)",
+      "MS": "MS　全体(BS)",
+      "（社福）明和福祉会": "社福　全体(BS)",
+    },
+    items: {
+      "有形固定資産（簿価）": "有形固定資産（簿価）",
+    },
   },
 ];
 
