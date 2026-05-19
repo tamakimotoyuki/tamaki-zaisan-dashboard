@@ -1015,11 +1015,14 @@ function renderPLAnnualSection(grid, section) {
 
   const houjinLabels = Object.keys(section.houjinSheets);
   for (const [label, candidates] of Object.entries(section.items)) {
-    const { result, allYears } = extractHoujinAnnualSum(section.houjinSheets, candidates);
-    const sortedYears = Array.from(allYears).sort((a, b) => yearOrderKey(a) - yearOrderKey(b));
-    const yearDisplays = sortedYears.map(y => yearLabelDisplay(y));
+    const { result } = extractHoujinAnnualSum(section.houjinSheets, candidates);
 
     houjinLabels.forEach((hLabel, idx) => {
+      // 法人別年度集合 (4月始まり/5月始まり混在を防ぐ)
+      const hYears = Object.keys(result[hLabel] || {});
+      const sortedYears = hYears.slice().sort((a, b) => yearOrderKey(a) - yearOrderKey(b));
+      const yearDisplays = sortedYears.map(y => yearLabelDisplay(y));
+
       const cdiv = document.createElement("div");
       cdiv.className = "dashboard-chart";
       const t = document.createElement("div");
@@ -1070,13 +1073,18 @@ function renderStackedPLSection(grid, section) {
 
   // 各stackItemを法人別に年度合計化
   const stackData = section.stackItems.map(item => extractHoujinAnnualSum(section.houjinSheets, item.candidates));
-  const allYears = new Set();
-  stackData.forEach(s => s.allYears.forEach(y => allYears.add(y)));
-  const sortedYears = Array.from(allYears).sort((a, b) => yearOrderKey(a) - yearOrderKey(b));
-  const yearDisplays = sortedYears.map(y => yearLabelDisplay(y));
 
   const houjinLabels = Object.keys(section.houjinSheets);
   houjinLabels.forEach((hLabel, idx) => {
+    // この法人だけの年度ラベルを集める (4月始まり/5月始まり混在を防ぐ)
+    const hYears = new Set();
+    stackData.forEach(s => {
+      const v = s.result[hLabel] || {};
+      Object.keys(v).forEach(y => hYears.add(y));
+    });
+    const sortedYears = Array.from(hYears).sort((a, b) => yearOrderKey(a) - yearOrderKey(b));
+    const yearDisplays = sortedYears.map(y => yearLabelDisplay(y));
+
     const cdiv = document.createElement("div");
     cdiv.className = "dashboard-chart";
     const t = document.createElement("div");
@@ -1159,13 +1167,17 @@ function renderCFSection(grid, section) {
   const longLoan = extractHoujinYearEnd(section.houjinBsSheets, "長期借入金");
   const shortLoan = extractHoujinYearEnd(section.houjinBsSheets, "短期借入金");
 
-  const allYears = new Set();
-  [keijo, genka, bvAsset, longLoan, shortLoan].forEach(d => d.allYears.forEach(y => allYears.add(y)));
-  const sortedYears = Array.from(allYears).sort((a, b) => yearOrderKey(a) - yearOrderKey(b));
-  const yearDisplays = sortedYears.map(y => yearLabelDisplay(y));
-
   const houjinLabels = Object.keys(section.houjinPlSheets);
   houjinLabels.forEach((hLabel, idx) => {
+    // 法人別年度集合 (4月始まり/5月始まり混在を防ぐ)
+    const hYears = new Set();
+    [keijo, genka, bvAsset, longLoan, shortLoan].forEach(d => {
+      const v = d.result[hLabel] || {};
+      Object.keys(v).forEach(y => hYears.add(y));
+    });
+    const sortedYears = Array.from(hYears).sort((a, b) => yearOrderKey(a) - yearOrderKey(b));
+    const yearDisplays = sortedYears.map(y => yearLabelDisplay(y));
+
     const cdiv = document.createElement("div");
     cdiv.className = "dashboard-chart";
     const t = document.createElement("div");
