@@ -358,11 +358,27 @@ function renderShisetsuTabs() {
   });
 }
 
+// BSシート判定 (全体(BS) 等)
+function isBalanceSheet(sheetName) {
+  return /\(BS\)\s*$/.test(sheetName || "");
+}
+
 function selectShisetsu(sheetName) {
   state.shisetsu = sheetName;
   document.querySelectorAll("#shisetsu-tabs .tab").forEach(t => {
     t.classList.toggle("active", t.dataset.sheet === sheetName);
   });
+  // BSタブでは「単月/累積」トグル非表示・モード固定(monthly=月末残高そのまま)
+  // (BSデータは既に月末累計残高=ストック値・累積化は無意味)
+  const toggleWrap = document.querySelector("#page-dashboard .chart-toggle-wrap");
+  if (toggleWrap) {
+    if (isBalanceSheet(sheetName)) {
+      toggleWrap.style.display = "none";
+      state.mode = "monthly";  // 強制リセット
+    } else {
+      toggleWrap.style.display = "";
+    }
+  }
   renderKoumokuTabs();
   const blocks = Object.keys(state.data.sheets[sheetName].blocks);
   const sorted = sortItems(blocks);
@@ -518,6 +534,22 @@ const DASHBOARD_SECTIONS = [
       "サービス活動収益": ["サービス活動収益", "事業収益合計"],
     },
   },
+  // 純資産推移 - 4法人BSから抽出（横断・最重要KPI）
+  {
+    title: "⑥純資産推移（4法人BS・月末残高）",
+    sheet: null,  // 特殊表示
+    isBS: true,
+    bsSheets: {
+      "（医）明和会": "医）明和会　全体(BS)",
+      "（医）メディエンス": "メディエンス　全体(BS)",
+      "MS": "MS　全体(BS)",
+      "（社福）明和福祉会": "社福　全体(BS)",
+    },
+    items: {
+      "純資産": "純資産",
+      "現預金": "現預金",
+    },
+  },
 ];
 
 let dashboardMode = "monthly"; // monthly | cumulative
@@ -540,6 +572,11 @@ function renderGlobalDashboard() {
   destroyDashboardCharts();
 
   for (const section of DASHBOARD_SECTIONS) {
+    // BSセクション専用処理 (4法人横断・純資産/現預金推移)
+    if (section.isBS) {
+      renderBSDashboardSection(grid, section);
+      continue;
+    }
     const sheet = state.data.sheets[section.sheet];
     const sec = document.createElement("section");
     sec.className = "dashboard-section";
@@ -620,6 +657,104 @@ function renderGlobalDashboard() {
     }
     grid.appendChild(sec);
   }
+}
+
+// ---------- BSダッシュボードセクション (4法人横断) ----------
+// 各項目 (純資産/現預金) について、4法人の年度末残高を1グラフに重ね描き。
+// BSは月末残高=ストック値なので、各年度の3月末 (=最終月) の値を取って年度推移を可視化。
+function renderBSDashboardSection(grid, section) {
+  const sec = document.createElement("section");
+  sec.className = "dashboard-section";
+  const h = document.createElement("h2");
+  h.textContent = section.title;
+  sec.appendChild(h);
+  const chartsDiv = document.createElement("div");
+  chartsDiv.className = "dashboard-charts";
+  sec.appendChild(chartsDiv);
+
+  // 各項目について4法人重ね折れ線グラフ
+  for (const [label, itemKey] of Object.entries(section.items)) {
+    const cdiv = document.createElement("div");
+    cdiv.className = "dashboard-chart";
+    const t = document.createElement("div");
+    t.className = "dashboard-chart-title";
+    t.textContent = label + "（年度末月末残高）";
+    cdiv.appendChild(t);
+    const wrap = document.createElement("div");
+    wrap.className = "dashboard-chart-canvas";
+    const canvas = document.createElement("canvas");
+    wrap.appendChild(canvas);
+    cdiv.appendChild(wrap);
+    chartsDiv.appendChild(cdiv);
+
+    // 全法人で利用可能な年度ラベルを収集
+    const allYears = new Set();
+    const houjinData = {}; // houjinLabel -> {year -> value (年度末月)}
+    for (const [houjinLabel, sheetName] of Object.entries(section.bsSheets)) {
+      const sheet = state.data.sheets[sheetName];
+      if (!sheet || !sheet.blocks[itemKey]) continue;
+      const block = sheet.blocks[itemKey];
+      houjinData[houjinLabel] = {};
+      for (const yearLabel of Object.keys(block)) {
+        const months = block[yearLabel] || {};
+        // 11=年度最終月 (3月末 or 4月末)
+        const monthKeys = Object.keys(months).filter(k => /^\d+$/.test(k));
+        if (monthKeys.length === 0) continue;
+        const maxKey = Math.max(...monthKeys.map(Number));
+        const yearEnd = months[String(maxKey)];
+        if (typeof yearEnd === "number" && yearEnd !== 0) {
+          houjinData[houjinLabel][yearLabel] = yearEnd;
+          allYears.add(yearLabel);
+        }
+      }
+    }
+
+    // 年度を時系列ソート (古→新)
+    const sortedYears = Array.from(allYears).sort((a, b) => yearOrderKey(a) - yearOrderKey(b));
+    const yearDisplays = sortedYears.map(y => yearLabelDisplay(y));
+
+    // 法人別データセット
+    const houjinLabels = Object.keys(houjinData);
+    const datasets = houjinLabels.map((hLabel, idx) => ({
+      label: hLabel,
+      data: sortedYears.map(y => houjinData[hLabel][y] ?? null),
+      backgroundColor: yearColor(idx, houjinLabels.length),
+      borderColor: yearColor(idx, houjinLabels.length),
+      borderWidth: 2,
+      tension: 0.1,
+      spanGaps: true,
+    }));
+
+    if (datasets.every(d => d.data.every(v => v === null))) {
+      const e = document.createElement("div");
+      e.className = "dashboard-chart-empty";
+      e.textContent = "BSデータなし";
+      cdiv.appendChild(e);
+      continue;
+    }
+
+    const c = new Chart(canvas.getContext("2d"), {
+      type: "line",
+      data: { labels: yearDisplays, datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        plugins: {
+          legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } },
+          tooltip: {
+            callbacks: { label: (ctx) => `${ctx.dataset.label}: ${fmt(ctx.parsed.y)}` },
+          },
+        },
+        scales: {
+          x: { ticks: { font: { size: 10 } } },
+          y: { ticks: { font: { size: 9 }, callback: v => v.toLocaleString("ja-JP") } },
+        },
+      },
+    });
+    dashboardCharts.push(c);
+  }
+  grid.appendChild(sec);
 }
 
 // ---------- ログイン ----------
