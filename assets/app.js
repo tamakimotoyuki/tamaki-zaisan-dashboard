@@ -601,7 +601,7 @@ const DASHBOARD_SECTIONS = [
   },
   // 減価償却費推移 - 法人別4チャート分割（PL年度合計）
   {
-    title: "⑩減価償却費推移（4法人別PL・年度合計）",
+    title: "⑩減価償却費推移（4法人別PL・月次・年度色分け）",
     isPL: true,
     houjinSheets: {
       "（医）明和会": "医）明和会　全体(PL)",
@@ -615,7 +615,7 @@ const DASHBOARD_SECTIONS = [
   },
   // 簡易営業CF (経常利益 + 減価償却費) - 法人別4チャート・スタック
   {
-    title: "⑪簡易営業CF推移（経常利益+減価償却費・法人別年度合計）",
+    title: "⑪簡易営業CF推移（経常利益+減価償却費・月次スタック・最新年度）",
     isStackedPL: true,
     houjinSheets: {
       "（医）明和会": "医）明和会　全体(PL)",
@@ -1013,7 +1013,7 @@ function extractHoujinYearEnd(bsSheets, itemKey) {
   return { result, allYears };
 }
 
-// ---------- ⑩ PL年度合計セクション (法人別4チャート) ----------
+// ---------- ⑩ PL月次セクション (法人別4チャート・月12本×年度色分け) ----------
 function renderPLAnnualSection(grid, section) {
   const sec = document.createElement("section");
   sec.className = "dashboard-section";
@@ -1026,19 +1026,15 @@ function renderPLAnnualSection(grid, section) {
 
   const houjinLabels = Object.keys(section.houjinSheets);
   for (const [label, candidates] of Object.entries(section.items)) {
-    const { result } = extractHoujinAnnualSum(section.houjinSheets, candidates);
-
-    houjinLabels.forEach((hLabel, idx) => {
-      // 法人別年度集合 (4月始まり/5月始まり混在を防ぐ)
-      const hYears = Object.keys(result[hLabel] || {});
-      const sortedYears = dedupeYearsByDisplay(hYears.slice()).sort((a, b) => yearOrderKey(a) - yearOrderKey(b));
-      const yearDisplays = sortedYears.map(y => yearLabelDisplay(y));
+    houjinLabels.forEach((hLabel) => {
+      const sheetName = section.houjinSheets[hLabel];
+      const sheet = state.data.sheets[sheetName];
 
       const cdiv = document.createElement("div");
       cdiv.className = "dashboard-chart";
       const t = document.createElement("div");
       t.className = "dashboard-chart-title";
-      t.textContent = `${label} - ${hLabel}（年度合計）`;
+      t.textContent = `${label} - ${hLabel}（月次）`;
       cdiv.appendChild(t);
       const wrap = document.createElement("div");
       wrap.className = "dashboard-chart-canvas";
@@ -1047,22 +1043,46 @@ function renderPLAnnualSection(grid, section) {
       cdiv.appendChild(wrap);
       chartsDiv.appendChild(cdiv);
 
-      const data = sortedYears.map(y => result[hLabel]?.[y] ?? null);
-      if (data.every(v => v === null)) {
+      if (!sheet?.blocks) {
+        const e = document.createElement("div");
+        e.className = "dashboard-chart-empty";
+        e.textContent = "シートなし";
+        cdiv.appendChild(e);
+        return;
+      }
+      const itemKey = findFirstItem(sheet.blocks, candidates);
+      if (!itemKey) {
         const e = document.createElement("div");
         e.className = "dashboard-chart-empty";
         e.textContent = "PLデータなし";
         cdiv.appendChild(e);
         return;
       }
-      const color = yearColor(idx, houjinLabels.length);
+      const block = sheet.blocks[itemKey];
+      const years = dedupeYearsByDisplay(Object.keys(block))
+        .slice().sort((a, b) => yearOrderKey(b) - yearOrderKey(a)); // 新→旧
+      const total = years.length;
+      const datasets = years.map((y, idx) => ({
+        label: yearLabelDisplay(y),
+        data: monthArray(block[y]),
+        backgroundColor: yearColor(idx, total),
+        borderColor: yearColor(idx, total),
+        borderWidth: 1,
+      }));
+      const monthLabels = getMonthLabels(detectSheetMonthStart(sheet));
       const c = new Chart(canvas.getContext("2d"), {
         type: "bar",
-        data: { labels: yearDisplays, datasets: [{ label: hLabel, data, backgroundColor: color, borderColor: color, borderWidth: 1 }] },
+        data: { labels: monthLabels, datasets },
         options: {
           responsive: true, maintainAspectRatio: false, animation: false,
-          plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${fmt(ctx.parsed.y)}` } } },
-          scales: { x: { ticks: { font: { size: 10 } } }, y: { ticks: { font: { size: 9 }, callback: v => v.toLocaleString("ja-JP") } } },
+          plugins: {
+            legend: { position: "bottom", labels: { boxWidth: 10, font: { size: 10 } } },
+            tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${fmt(ctx.parsed.y)}` } },
+          },
+          scales: {
+            x: { ticks: { font: { size: 9 } } },
+            y: { ticks: { font: { size: 9 }, callback: v => v.toLocaleString("ja-JP") } },
+          },
         },
       });
       dashboardCharts.push(c);
@@ -1082,25 +1102,15 @@ function renderStackedPLSection(grid, section) {
   chartsDiv.className = "dashboard-charts";
   sec.appendChild(chartsDiv);
 
-  // 各stackItemを法人別に年度合計化
-  const stackData = section.stackItems.map(item => extractHoujinAnnualSum(section.houjinSheets, item.candidates));
-
   const houjinLabels = Object.keys(section.houjinSheets);
-  houjinLabels.forEach((hLabel, idx) => {
-    // この法人だけの年度ラベルを集める (4月始まり/5月始まり混在を防ぐ)
-    const hYears = new Set();
-    stackData.forEach(s => {
-      const v = s.result[hLabel] || {};
-      Object.keys(v).forEach(y => hYears.add(y));
-    });
-    const sortedYears = dedupeYearsByDisplay(Array.from(hYears)).sort((a, b) => yearOrderKey(a) - yearOrderKey(b));
-    const yearDisplays = sortedYears.map(y => yearLabelDisplay(y));
+  houjinLabels.forEach((hLabel) => {
+    const sheetName = section.houjinSheets[hLabel];
+    const sheet = state.data.sheets[sheetName];
 
     const cdiv = document.createElement("div");
     cdiv.className = "dashboard-chart";
     const t = document.createElement("div");
     t.className = "dashboard-chart-title";
-    t.textContent = `${hLabel} - 経常利益+減価償却費（年度合計）`;
     cdiv.appendChild(t);
     const wrap = document.createElement("div");
     wrap.className = "dashboard-chart-canvas";
@@ -1109,19 +1119,29 @@ function renderStackedPLSection(grid, section) {
     cdiv.appendChild(wrap);
     chartsDiv.appendChild(cdiv);
 
-    const datasets = section.stackItems.map((item, i) => {
-      const color = yearColor(i, section.stackItems.length);
-      return {
-        label: item.label,
-        data: sortedYears.map(y => stackData[i].result[hLabel]?.[y] ?? null),
-        backgroundColor: color,
-        borderColor: color,
-        borderWidth: 1,
-        stack: "cf",
-      };
-    });
+    if (!sheet?.blocks) {
+      t.textContent = `${hLabel} - 経常利益+減価償却費（月次）`;
+      const e = document.createElement("div");
+      e.className = "dashboard-chart-empty";
+      e.textContent = "シートなし";
+      cdiv.appendChild(e);
+      return;
+    }
 
-    if (datasets.every(d => d.data.every(v => v === null))) {
+    const itemBlocks = section.stackItems.map(item => {
+      const key = findFirstItem(sheet.blocks, item.candidates);
+      return key ? sheet.blocks[key] : null;
+    });
+    // 両項目で共通の年度
+    const commonYears = itemBlocks[0] && itemBlocks[1]
+      ? Object.keys(itemBlocks[0]).filter(y => y in itemBlocks[1])
+      : [];
+    const deduped = dedupeYearsByDisplay(commonYears);
+    const latestYear = deduped.slice().sort((a, b) => yearOrderKey(b) - yearOrderKey(a))[0];
+
+    t.textContent = `${hLabel} - 経常利益+減価償却費（月次・${latestYear ? yearLabelDisplay(latestYear) : "?"}）`;
+
+    if (!latestYear) {
       const e = document.createElement("div");
       e.className = "dashboard-chart-empty";
       e.textContent = "PLデータなし";
@@ -1129,9 +1149,23 @@ function renderStackedPLSection(grid, section) {
       return;
     }
 
+    const datasets = section.stackItems.map((item, i) => {
+      const block = itemBlocks[i];
+      const color = i === 0 ? "rgba(20,60,120,0.92)" : "rgba(120,170,220,0.85)";
+      return {
+        label: item.label,
+        data: block ? monthArray(block[latestYear]) : new Array(12).fill(null),
+        backgroundColor: color,
+        borderColor: color,
+        borderWidth: 1,
+        stack: "cf",
+      };
+    });
+
+    const monthLabels = getMonthLabels(detectSheetMonthStart(sheet));
     const c = new Chart(canvas.getContext("2d"), {
       type: "bar",
-      data: { labels: yearDisplays, datasets },
+      data: { labels: monthLabels, datasets },
       options: {
         responsive: true, maintainAspectRatio: false, animation: false,
         plugins: {
