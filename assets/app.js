@@ -1087,9 +1087,16 @@ function renderPLAnnualSection(grid, section) {
         const yDisp = yearLabelDisplay(y);
         const annual = annualSumFromBlock(block, y);
         const monthly = annual === null ? null : annual / 12;
+        // 累積モード時は年度内累積 (年度をまたぐとリセット)
+        let acc = 0;
         for (let m = 0; m < 12; m++) {
           xLabels.push(`${yDisp} ${monthsTpl[m]}`);
-          data.push(monthly);
+          if (dashboardMode === "cumulative") {
+            if (monthly === null) data.push(null);
+            else { acc += monthly; data.push(acc); }
+          } else {
+            data.push(monthly);
+          }
         }
       });
 
@@ -1176,23 +1183,31 @@ function renderStackedPLSection(grid, section) {
     }
 
     // 各年度: 経常利益(青系) と 減価償却(黄系) を同じstack内で積み上げ
+    // 月次/累積はグローバル dashboardMode に従う
     const total = years.length;
     const datasets = [];
     years.forEach((y, idx) => {
       const yDisp = yearLabelDisplay(y);
       const t = total <= 1 ? 0 : idx / (total - 1);
-      // 青系 (経常利益): 新年=濃い、旧年=淡い
       const blueColor = `hsl(210, ${70 - t * 35}%, ${25 + t * 63}%)`;
-      // 黄系 (減価償却): 新年=濃い、旧年=淡い
       const yellowColor = `hsl(45, ${85 - t * 40}%, ${45 + t * 40}%)`;
 
-      // 経常利益 (月次)
+      // 経常利益 月次データ
       const keijoMonths = itemBlocks[0]?.[y] || {};
-      const keijoData = new Array(12).fill(null);
+      const keijoRaw = new Array(12).fill(null);
       for (let m = 0; m < 12; m++) {
         const v = keijoMonths[String(m)];
-        if (typeof v === "number") keijoData[m] = v;
+        if (typeof v === "number") keijoRaw[m] = v;
       }
+      // 減価償却 月次 (年合計÷12均等)
+      const genkaBlock = itemBlocks[1];
+      const genkaAnnual = genkaBlock ? annualSumFromBlock(genkaBlock, y) : null;
+      const genkaPerMonth = genkaAnnual === null ? null : genkaAnnual / 12;
+      const genkaRaw = new Array(12).fill(genkaPerMonth);
+
+      const keijoData = dashboardMode === "cumulative" ? cumulative(keijoRaw) : keijoRaw;
+      const genkaData = dashboardMode === "cumulative" ? cumulative(genkaRaw) : genkaRaw;
+
       datasets.push({
         label: `${yDisp} 経常利益`,
         data: keijoData,
@@ -1201,14 +1216,9 @@ function renderStackedPLSection(grid, section) {
         borderWidth: 1,
         stack: `y${idx}`,
       });
-
-      // 減価償却 (年合計÷12)
-      const genkaBlock = itemBlocks[1];
-      const genkaAnnual = genkaBlock ? annualSumFromBlock(genkaBlock, y) : null;
-      const genkaPerMonth = genkaAnnual === null ? null : genkaAnnual / 12;
       datasets.push({
         label: `${yDisp} 減価償却`,
-        data: new Array(12).fill(genkaPerMonth),
+        data: genkaData,
         backgroundColor: yellowColor,
         borderColor: yellowColor,
         borderWidth: 1,
