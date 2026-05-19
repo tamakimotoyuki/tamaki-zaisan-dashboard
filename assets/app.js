@@ -625,7 +625,7 @@ const DASHBOARD_SECTIONS = [
     },
     stackItems: [
       { label: "経常利益", candidates: ["経常利益", "経常損益"] },
-      { label: "減価償却費", candidates: ["減価償却費"] },
+      { label: "減価償却費", candidates: ["減価償却費"], evenDistribute: true },
     ],
   },
   // 簡易キャッシュフロー (営業/投資/財務) - 法人別4チャート
@@ -1164,9 +1164,20 @@ function renderStackedPLSection(grid, section) {
     const datasets = section.stackItems.map((item, i) => {
       const block = itemBlocks[i];
       const color = i === 0 ? "rgba(20,60,120,0.92)" : "rgba(120,170,220,0.85)";
+      let data;
+      if (!block) {
+        data = new Array(12).fill(null);
+      } else if (item.evenDistribute) {
+        // 年度合計を12等分 (記帳パターン差を吸収・経常利益とstackしやすくする)
+        const annual = annualSumFromBlock(block, latestYear);
+        const monthly = (annual ?? 0) / 12;
+        data = new Array(12).fill(annual === null ? null : monthly);
+      } else {
+        data = monthArray(block[latestYear]);
+      }
       return {
-        label: item.label,
-        data: block ? monthArray(block[latestYear]) : new Array(12).fill(null),
+        label: item.label + (item.evenDistribute ? "（年合計÷12）" : ""),
+        data,
         backgroundColor: color,
         borderColor: color,
         borderWidth: 1,
