@@ -566,7 +566,7 @@ const DASHBOARD_SECTIONS = [
     },
     splitByHoujin: ["現預金"],
   },
-  // 長期借入金推移 - 法人別4チャート分割
+  // 長期借入金推移 - 法人別4チャート分割（データ欠損は0扱い）
   {
     title: "⑧長期借入金推移（4法人別BS・年度末残高）",
     sheet: null,
@@ -581,6 +581,7 @@ const DASHBOARD_SECTIONS = [
       "長期借入金": "長期借入金",
     },
     splitByHoujin: ["長期借入金"],
+    fillMissingAsZero: ["長期借入金"],
   },
   // 有形固定資産推移 - 法人別4チャート分割（設備投資の累計）
   {
@@ -721,17 +722,36 @@ function renderBSDashboardSection(grid, section) {
   sec.appendChild(chartsDiv);
 
   const splitItems = new Set(section.splitByHoujin || []);
+  const fillZeroItems = new Set(section.fillMissingAsZero || []);
+
+  // 法人ごとの「他BS項目で利用可能な年度」をプリ計算（欠損→0補完用）
+  const houjinAvailableYears = {}; // houjinLabel -> Set<yearLabel>
+  for (const [houjinLabel, sheetName] of Object.entries(section.bsSheets)) {
+    const sheet = state.data.sheets[sheetName];
+    const ys = new Set();
+    if (sheet && sheet.blocks) {
+      for (const blockKey of Object.keys(sheet.blocks)) {
+        const block = sheet.blocks[blockKey] || {};
+        for (const yearLabel of Object.keys(block)) {
+          const months = block[yearLabel] || {};
+          const monthKeys = Object.keys(months).filter(k => /^\d+$/.test(k));
+          if (monthKeys.length > 0) ys.add(yearLabel);
+        }
+      }
+    }
+    houjinAvailableYears[houjinLabel] = ys;
+  }
 
   // 各項目について4法人重ね折れ線グラフ
   for (const [label, itemKey] of Object.entries(section.items)) {
+    const fillZero = fillZeroItems.has(label);
     // 全法人で利用可能な年度ラベルを収集
     const allYears = new Set();
     const houjinData = {}; // houjinLabel -> {year -> value (年度末月)}
     for (const [houjinLabel, sheetName] of Object.entries(section.bsSheets)) {
       const sheet = state.data.sheets[sheetName];
-      if (!sheet || !sheet.blocks[itemKey]) continue;
-      const block = sheet.blocks[itemKey];
       houjinData[houjinLabel] = {};
+      const block = sheet?.blocks?.[itemKey] || {};
       for (const yearLabel of Object.keys(block)) {
         const months = block[yearLabel] || {};
         const monthKeys = Object.keys(months).filter(k => /^\d+$/.test(k));
@@ -741,6 +761,15 @@ function renderBSDashboardSection(grid, section) {
         if (typeof yearEnd === "number") {
           houjinData[houjinLabel][yearLabel] = yearEnd;
           allYears.add(yearLabel);
+        }
+      }
+      // 欠損→0補完: その法人が他BS項目で持っている年度に値がなければ0扱い
+      if (fillZero) {
+        for (const y of houjinAvailableYears[houjinLabel]) {
+          if (!(y in houjinData[houjinLabel])) {
+            houjinData[houjinLabel][y] = 0;
+            allYears.add(y);
+          }
         }
       }
     }
