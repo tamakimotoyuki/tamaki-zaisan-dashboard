@@ -1254,14 +1254,16 @@ function renderCFSection(grid, section) {
         invCF.push(-(dBV + gv));
       } else invCF.push(null);
 
-      // 財務CF
+      // 財務CF: 両年度ともBSデータ必須 (片方欠損で全額計上する不具合を防ぐ)
       if (prevY) {
         let fin = 0;
         let any = false;
-        const dL = (longLoan.result[hLabel]?.[y] ?? 0) - (longLoan.result[hLabel]?.[prevY] ?? 0);
-        const dS = (shortLoan.result[hLabel]?.[y] ?? 0) - (shortLoan.result[hLabel]?.[prevY] ?? 0);
-        if (typeof longLoan.result[hLabel]?.[y] === "number" || typeof longLoan.result[hLabel]?.[prevY] === "number") { fin += dL; any = true; }
-        if (typeof shortLoan.result[hLabel]?.[y] === "number" || typeof shortLoan.result[hLabel]?.[prevY] === "number") { fin += dS; any = true; }
+        const llY = longLoan.result[hLabel]?.[y];
+        const llP = longLoan.result[hLabel]?.[prevY];
+        const slY = shortLoan.result[hLabel]?.[y];
+        const slP = shortLoan.result[hLabel]?.[prevY];
+        if (typeof llY === "number" && typeof llP === "number") { fin += (llY - llP); any = true; }
+        if (typeof slY === "number" && typeof slP === "number") { fin += (slY - slP); any = true; }
         finCF.push(any ? fin : null);
       } else finCF.push(null);
     });
