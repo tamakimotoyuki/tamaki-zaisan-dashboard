@@ -601,7 +601,7 @@ const DASHBOARD_SECTIONS = [
   },
   // 減価償却費推移 - 法人別4チャート分割（PL年度合計）
   {
-    title: "⑩減価償却費推移（4法人別PL・年度合計）",
+    title: "⑩減価償却費推移（4法人別PL・月次タイムライン・年合計÷12）",
     isPL: true,
     houjinSheets: {
       "（医）明和会": "医）明和会　全体(PL)",
@@ -1018,8 +1018,8 @@ function extractHoujinYearEnd(bsSheets, itemKey) {
   return { result, allYears };
 }
 
-// ---------- ⑩ PL年度合計セクション (法人別4チャート・年度別棒グラフ) ----------
-// PCA記帳パターン (年度末一括計上等) により月次表示が破綻するため、年度合計表示を採用
+// ---------- ⑩ PL長期月次タイムライン (法人別4チャート・年合計÷12で月次均等配分) ----------
+// PCAの記帳パターン差を吸収し、長期推移を月次解像度で見られるように
 function renderPLAnnualSection(grid, section) {
   const sec = document.createElement("section");
   sec.className = "dashboard-section";
@@ -1040,7 +1040,6 @@ function renderPLAnnualSection(grid, section) {
       cdiv.className = "dashboard-chart";
       const t = document.createElement("div");
       t.className = "dashboard-chart-title";
-      t.textContent = `${label} - ${hLabel}（年度合計）`;
       cdiv.appendChild(t);
       const wrap = document.createElement("div");
       wrap.className = "dashboard-chart-canvas";
@@ -1050,6 +1049,7 @@ function renderPLAnnualSection(grid, section) {
       chartsDiv.appendChild(cdiv);
 
       if (!sheet?.blocks) {
+        t.textContent = `${label} - ${hLabel}`;
         const e = document.createElement("div");
         e.className = "dashboard-chart-empty";
         e.textContent = "シートなし";
@@ -1058,6 +1058,7 @@ function renderPLAnnualSection(grid, section) {
       }
       const itemKey = findFirstItem(sheet.blocks, candidates);
       if (!itemKey) {
+        t.textContent = `${label} - ${hLabel}`;
         const e = document.createElement("div");
         e.className = "dashboard-chart-empty";
         e.textContent = "PLデータなし";
@@ -1067,10 +1068,9 @@ function renderPLAnnualSection(grid, section) {
       const block = sheet.blocks[itemKey];
       const years = dedupeYearsByDisplay(Object.keys(block))
         .slice().sort((a, b) => yearOrderKey(a) - yearOrderKey(b));
-      const yearDisplays = years.map(y => yearLabelDisplay(y));
-      const data = years.map(y => annualSumFromBlock(block, y) ?? null);
 
-      if (data.every(v => v === null)) {
+      if (years.length === 0) {
+        t.textContent = `${label} - ${hLabel}`;
         const e = document.createElement("div");
         e.className = "dashboard-chart-empty";
         e.textContent = "PLデータなし";
@@ -1078,11 +1078,26 @@ function renderPLAnnualSection(grid, section) {
         return;
       }
 
+      t.textContent = `${label} - ${hLabel}（月次・${yearLabelDisplay(years[0])}〜${yearLabelDisplay(years[years.length - 1])}・年合計÷12）`;
+
+      const monthsTpl = getMonthLabels(detectSheetMonthStart(sheet));
+      const xLabels = [];
+      const data = [];
+      years.forEach(y => {
+        const yDisp = yearLabelDisplay(y);
+        const annual = annualSumFromBlock(block, y);
+        const monthly = annual === null ? null : annual / 12;
+        for (let m = 0; m < 12; m++) {
+          xLabels.push(`${yDisp} ${monthsTpl[m]}`);
+          data.push(monthly);
+        }
+      });
+
       const color = yearColor(idx, houjinLabels.length);
       const c = new Chart(canvas.getContext("2d"), {
         type: "bar",
         data: {
-          labels: yearDisplays,
+          labels: xLabels,
           datasets: [{ label: hLabel, data, backgroundColor: color, borderColor: color, borderWidth: 1 }],
         },
         options: {
@@ -1092,7 +1107,7 @@ function renderPLAnnualSection(grid, section) {
             tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${fmt(ctx.parsed.y)}` } },
           },
           scales: {
-            x: { ticks: { font: { size: 10 } } },
+            x: { ticks: { font: { size: 8 }, maxRotation: 90, minRotation: 60, autoSkip: true, maxTicksLimit: 30 } },
             y: { ticks: { font: { size: 9 }, callback: v => v.toLocaleString("ja-JP") } },
           },
         },
