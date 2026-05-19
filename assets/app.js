@@ -832,7 +832,7 @@ function renderBSDashboardSection(grid, section) {
       }
     }
 
-    const sortedYears = Array.from(allYears).sort((a, b) => yearOrderKey(a) - yearOrderKey(b));
+    const sortedYears = dedupeYearsByDisplay(Array.from(allYears)).sort((a, b) => yearOrderKey(a) - yearOrderKey(b));
     const yearDisplays = sortedYears.map(y => yearLabelDisplay(y));
     const houjinLabels = Object.keys(section.bsSheets);
 
@@ -948,6 +948,17 @@ function renderBSDashboardSection(grid, section) {
   grid.appendChild(sec);
 }
 
+// ---------- 同一表示ラベル年度の重複排除 (MS PL の 7.4-8.3 + 7.5-8.4 等の保険) ----------
+function dedupeYearsByDisplay(years) {
+  const seen = new Map();
+  for (const y of years) {
+    const disp = yearLabelDisplay(y);
+    // 同じ表示なら文字列比較で大きい方 (5月始まり .5- > 4月始まり .4-) を採用
+    if (!seen.has(disp) || y > seen.get(disp)) seen.set(disp, y);
+  }
+  return years.filter(y => seen.get(yearLabelDisplay(y)) === y);
+}
+
 // ---------- PL年度合計ヘルパー ----------
 function annualSumFromBlock(block, year) {
   const months = block?.[year] || {};
@@ -1020,7 +1031,7 @@ function renderPLAnnualSection(grid, section) {
     houjinLabels.forEach((hLabel, idx) => {
       // 法人別年度集合 (4月始まり/5月始まり混在を防ぐ)
       const hYears = Object.keys(result[hLabel] || {});
-      const sortedYears = hYears.slice().sort((a, b) => yearOrderKey(a) - yearOrderKey(b));
+      const sortedYears = dedupeYearsByDisplay(hYears.slice()).sort((a, b) => yearOrderKey(a) - yearOrderKey(b));
       const yearDisplays = sortedYears.map(y => yearLabelDisplay(y));
 
       const cdiv = document.createElement("div");
@@ -1082,7 +1093,7 @@ function renderStackedPLSection(grid, section) {
       const v = s.result[hLabel] || {};
       Object.keys(v).forEach(y => hYears.add(y));
     });
-    const sortedYears = Array.from(hYears).sort((a, b) => yearOrderKey(a) - yearOrderKey(b));
+    const sortedYears = dedupeYearsByDisplay(Array.from(hYears)).sort((a, b) => yearOrderKey(a) - yearOrderKey(b));
     const yearDisplays = sortedYears.map(y => yearLabelDisplay(y));
 
     const cdiv = document.createElement("div");
@@ -1175,7 +1186,7 @@ function renderCFSection(grid, section) {
       const v = d.result[hLabel] || {};
       Object.keys(v).forEach(y => hYears.add(y));
     });
-    const sortedYears = Array.from(hYears).sort((a, b) => yearOrderKey(a) - yearOrderKey(b));
+    const sortedYears = dedupeYearsByDisplay(Array.from(hYears)).sort((a, b) => yearOrderKey(a) - yearOrderKey(b));
     const yearDisplays = sortedYears.map(y => yearLabelDisplay(y));
 
     const cdiv = document.createElement("div");
