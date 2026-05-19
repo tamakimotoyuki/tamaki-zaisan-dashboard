@@ -38889,9 +38889,66 @@
       }
     },
     "医）明和会　全体(BS)": {
-      "blocks": {},
-      "block_meta": {},
-      "_note_bs_placeholder": "BS（貸借対照表）は header のみ・データ未投入。月次試算表.xlsx の BS) シート or PCA画面DLから後日投入予定"
+      "blocks": {
+        "現預金": {},
+        "医業未収金": {},
+        "棚卸資産": {},
+        "有形固定資産（簿価）": {},
+        "短期借入金": {},
+        "長期借入金": {},
+        "純資産": {},
+        "役員貸付金": {},
+        "関係会社債権": {},
+        "関係会社債務": {},
+        "未払金・未払費用": {}
+      },
+      "block_meta": {
+        "現預金": {
+          "category": "BS",
+          "kind": "stock_balance"
+        },
+        "医業未収金": {
+          "category": "BS",
+          "kind": "stock_balance"
+        },
+        "棚卸資産": {
+          "category": "BS",
+          "kind": "stock_balance"
+        },
+        "有形固定資産（簿価）": {
+          "category": "BS",
+          "kind": "stock_balance"
+        },
+        "短期借入金": {
+          "category": "BS",
+          "kind": "stock_balance"
+        },
+        "長期借入金": {
+          "category": "BS",
+          "kind": "stock_balance"
+        },
+        "純資産": {
+          "category": "BS",
+          "kind": "stock_balance"
+        },
+        "役員貸付金": {
+          "category": "BS",
+          "kind": "stock_balance"
+        },
+        "関係会社債権": {
+          "category": "BS",
+          "kind": "stock_balance"
+        },
+        "関係会社債務": {
+          "category": "BS",
+          "kind": "stock_balance"
+        },
+        "未払金・未払費用": {
+          "category": "BS",
+          "kind": "stock_balance"
+        }
+      },
+      "_note_bs_placeholder": "BS（貸借対照表）は header のみ・データ未投入。PCA「集計金額: 貸借対照表のみ累計」で取得した月末残高を投入予定（2026-05-19）"
     },
     "メディエンス　全体(PL)": {
       "blocks": {
@@ -39165,9 +39222,66 @@
       "block_meta": []
     },
     "メディエンス　全体(BS)": {
-      "blocks": {},
-      "block_meta": {},
-      "_note_bs_placeholder": "BS（貸借対照表）は header のみ・データ未投入。月次試算表.xlsx の BS) シート or PCA画面DLから後日投入予定"
+      "blocks": {
+        "現預金": {},
+        "医業未収金": {},
+        "棚卸資産": {},
+        "有形固定資産（簿価）": {},
+        "短期借入金": {},
+        "長期借入金": {},
+        "純資産": {},
+        "役員貸付金": {},
+        "関係会社債権": {},
+        "関係会社債務": {},
+        "未払金・未払費用": {}
+      },
+      "block_meta": {
+        "現預金": {
+          "category": "BS",
+          "kind": "stock_balance"
+        },
+        "医業未収金": {
+          "category": "BS",
+          "kind": "stock_balance"
+        },
+        "棚卸資産": {
+          "category": "BS",
+          "kind": "stock_balance"
+        },
+        "有形固定資産（簿価）": {
+          "category": "BS",
+          "kind": "stock_balance"
+        },
+        "短期借入金": {
+          "category": "BS",
+          "kind": "stock_balance"
+        },
+        "長期借入金": {
+          "category": "BS",
+          "kind": "stock_balance"
+        },
+        "純資産": {
+          "category": "BS",
+          "kind": "stock_balance"
+        },
+        "役員貸付金": {
+          "category": "BS",
+          "kind": "stock_balance"
+        },
+        "関係会社債権": {
+          "category": "BS",
+          "kind": "stock_balance"
+        },
+        "関係会社債務": {
+          "category": "BS",
+          "kind": "stock_balance"
+        },
+        "未払金・未払費用": {
+          "category": "BS",
+          "kind": "stock_balance"
+        }
+      },
+      "_note_bs_placeholder": "BS（貸借対照表）は header のみ・データ未投入。PCA「集計金額: 貸借対照表のみ累計」で取得した月末残高を投入予定（2026-05-19）"
     },
     "MS　全体(PL)": {
       "blocks": {
@@ -41682,9 +41796,66 @@
       }
     },
     "MS　全体(BS)": {
-      "blocks": {},
-      "block_meta": {},
-      "_note_bs_placeholder": "BS（貸借対照表）は header のみ・データ未投入。月次試算表.xlsx の BS) シート or PCA画面DLから後日投入予定"
+      "blocks": {
+        "現預金": {},
+        "医業未収金": {},
+        "棚卸資産": {},
+        "有形固定資産（簿価）": {},
+        "短期借入金": {},
+        "長期借入金": {},
+        "純資産": {},
+        "役員貸付金": {},
+        "関係会社債権": {},
+        "関係会社債務": {},
+        "未払金・未払費用": {}
+      },
+      "block_meta": {
+        "現預金": {
+          "category": "BS",
+          "kind": "stock_balance"
+        },
+        "医業未収金": {
+          "category": "BS",
+          "kind": "stock_balance"
+        },
+        "棚卸資産": {
+          "category": "BS",
+          "kind": "stock_balance"
+        },
+        "有形固定資産（簿価）": {
+          "category": "BS",
+          "kind": "stock_balance"
+        },
+        "短期借入金": {
+          "category": "BS",
+          "kind": "stock_balance"
+        },
+        "長期借入金": {
+          "category": "BS",
+          "kind": "stock_balance"
+        },
+        "純資産": {
+          "category": "BS",
+          "kind": "stock_balance"
+        },
+        "役員貸付金": {
+          "category": "BS",
+          "kind": "stock_balance"
+        },
+        "関係会社債権": {
+          "category": "BS",
+          "kind": "stock_balance"
+        },
+        "関係会社債務": {
+          "category": "BS",
+          "kind": "stock_balance"
+        },
+        "未払金・未払費用": {
+          "category": "BS",
+          "kind": "stock_balance"
+        }
+      },
+      "_note_bs_placeholder": "BS（貸借対照表）は header のみ・データ未投入。PCA「集計金額: 貸借対照表のみ累計」で取得した月末残高を投入予定（2026-05-19）"
     },
     "社福　全体(PL)": {
       "blocks": {
@@ -42753,9 +42924,66 @@
       }
     },
     "社福　全体(BS)": {
-      "blocks": {},
-      "block_meta": {},
-      "_note_bs_placeholder": "BS（貸借対照表）は header のみ・データ未投入。月次試算表.xlsx の BS) シート or PCA画面DLから後日投入予定"
+      "blocks": {
+        "現預金": {},
+        "医業未収金": {},
+        "棚卸資産": {},
+        "有形固定資産（簿価）": {},
+        "短期借入金": {},
+        "長期借入金": {},
+        "純資産": {},
+        "役員貸付金": {},
+        "関係会社債権": {},
+        "関係会社債務": {},
+        "未払金・未払費用": {}
+      },
+      "block_meta": {
+        "現預金": {
+          "category": "BS",
+          "kind": "stock_balance"
+        },
+        "医業未収金": {
+          "category": "BS",
+          "kind": "stock_balance"
+        },
+        "棚卸資産": {
+          "category": "BS",
+          "kind": "stock_balance"
+        },
+        "有形固定資産（簿価）": {
+          "category": "BS",
+          "kind": "stock_balance"
+        },
+        "短期借入金": {
+          "category": "BS",
+          "kind": "stock_balance"
+        },
+        "長期借入金": {
+          "category": "BS",
+          "kind": "stock_balance"
+        },
+        "純資産": {
+          "category": "BS",
+          "kind": "stock_balance"
+        },
+        "役員貸付金": {
+          "category": "BS",
+          "kind": "stock_balance"
+        },
+        "関係会社債権": {
+          "category": "BS",
+          "kind": "stock_balance"
+        },
+        "関係会社債務": {
+          "category": "BS",
+          "kind": "stock_balance"
+        },
+        "未払金・未払費用": {
+          "category": "BS",
+          "kind": "stock_balance"
+        }
+      },
+      "_note_bs_placeholder": "BS（貸借対照表）は header のみ・データ未投入。PCA「集計金額: 貸借対照表のみ累計」で取得した月末残高を投入予定（2026-05-19）"
     }
   },
   "merged_meidiens_at": "20260517_0013",
@@ -42764,6 +42992,19 @@
   "mediens_zentai_R6_source": "ground_truth/mediens_R1_clean.json (PCA API)",
   "mediens_all_years_merged_at": "20260517_0044",
   "api_historical_merged_at": "20260517_0245",
-  "bs_split_at": "2026-05-19T23:00:49.821628",
-  "bs_split_note": "全体シートをPL/BSに分割。BS側は空placeholder。webapp UI改修用（2026-05-19）"
+  "bs_split_at": "2026-05-19T23:09:38.176432",
+  "bs_split_note": "全体シートをPL/BSに分割。BS側は11項目placeholder（月次試算表.xlsx BS）シート準拠）。PCAの『集計金額: 貸借対照表のみ累計』で月末残高を取得して投入予定。",
+  "bs_items": [
+    "現預金",
+    "医業未収金",
+    "棚卸資産",
+    "有形固定資産（簿価）",
+    "短期借入金",
+    "長期借入金",
+    "純資産",
+    "役員貸付金",
+    "関係会社債権",
+    "関係会社債務",
+    "未払金・未払費用"
+  ]
 }
