@@ -837,7 +837,7 @@ function renderBSDashboardSection(grid, section) {
     const houjinLabels = Object.keys(section.bsSheets);
 
     if (splitItems.has(label)) {
-      // 法人別4チャート分割
+      // 法人別4チャート分割 — 各法人で自身の年度キーのみ使う (法人間のキー形式混在を防ぐ)
       houjinLabels.forEach((hLabel, idx) => {
         const cdiv = document.createElement("div");
         cdiv.className = "dashboard-chart";
@@ -852,7 +852,12 @@ function renderBSDashboardSection(grid, section) {
         cdiv.appendChild(wrap);
         chartsDiv.appendChild(cdiv);
 
-        const data = sortedYears.map(y => houjinData[hLabel]?.[y] ?? null);
+        // この法人の年度キーのみで X軸を構築 (グローバル dedup を使わない)
+        const myYears = dedupeYearsByDisplay(Object.keys(houjinData[hLabel] || {}))
+          .slice().sort((a, b) => yearOrderKey(a) - yearOrderKey(b));
+        const myDisplays = myYears.map(y => yearLabelDisplay(y));
+        const data = myYears.map(y => houjinData[hLabel]?.[y] ?? null);
+
         if (data.every(v => v === null)) {
           const e = document.createElement("div");
           e.className = "dashboard-chart-empty";
@@ -864,7 +869,7 @@ function renderBSDashboardSection(grid, section) {
         const c = new Chart(canvas.getContext("2d"), {
           type: "line",
           data: {
-            labels: yearDisplays,
+            labels: myDisplays,
             datasets: [{
               label: hLabel,
               data,
