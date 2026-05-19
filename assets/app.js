@@ -1175,26 +1175,45 @@ function renderStackedPLSection(grid, section) {
       return;
     }
 
-    // 各年度 1データセット: 月ごとに 経常利益 + 減価償却÷12 の合算値
+    // 各年度: 経常利益(青系) と 減価償却(黄系) を同じstack内で積み上げ
     const total = years.length;
-    const datasets = years.map((y, idx) => {
-      const monthly = new Array(12).fill(null);
+    const datasets = [];
+    years.forEach((y, idx) => {
+      const yDisp = yearLabelDisplay(y);
+      const t = total <= 1 ? 0 : idx / (total - 1);
+      // 青系 (経常利益): 新年=濃い、旧年=淡い
+      const blueColor = `hsl(210, ${70 - t * 35}%, ${25 + t * 63}%)`;
+      // 黄系 (減価償却): 新年=濃い、旧年=淡い
+      const yellowColor = `hsl(45, ${85 - t * 40}%, ${45 + t * 40}%)`;
+
+      // 経常利益 (月次)
       const keijoMonths = itemBlocks[0]?.[y] || {};
+      const keijoData = new Array(12).fill(null);
+      for (let m = 0; m < 12; m++) {
+        const v = keijoMonths[String(m)];
+        if (typeof v === "number") keijoData[m] = v;
+      }
+      datasets.push({
+        label: `${yDisp} 経常利益`,
+        data: keijoData,
+        backgroundColor: blueColor,
+        borderColor: blueColor,
+        borderWidth: 1,
+        stack: `y${idx}`,
+      });
+
+      // 減価償却 (年合計÷12)
       const genkaBlock = itemBlocks[1];
       const genkaAnnual = genkaBlock ? annualSumFromBlock(genkaBlock, y) : null;
-      const genkaPerMonth = genkaAnnual === null ? 0 : genkaAnnual / 12;
-      for (let m = 0; m < 12; m++) {
-        const k = keijoMonths[String(m)];
-        if (typeof k === "number") monthly[m] = k + genkaPerMonth;
-      }
-      const color = yearColor(idx, total);
-      return {
-        label: yearLabelDisplay(y),
-        data: monthly,
-        backgroundColor: color,
-        borderColor: color,
+      const genkaPerMonth = genkaAnnual === null ? null : genkaAnnual / 12;
+      datasets.push({
+        label: `${yDisp} 減価償却`,
+        data: new Array(12).fill(genkaPerMonth),
+        backgroundColor: yellowColor,
+        borderColor: yellowColor,
         borderWidth: 1,
-      };
+        stack: `y${idx}`,
+      });
     });
     const monthLabels = getMonthLabels(detectSheetMonthStart(sheet));
     const c = new Chart(canvas.getContext("2d"), {
@@ -1203,12 +1222,12 @@ function renderStackedPLSection(grid, section) {
       options: {
         responsive: true, maintainAspectRatio: false, animation: false,
         plugins: {
-          legend: { position: "bottom", labels: { boxWidth: 10, font: { size: 10 } } },
+          legend: { position: "bottom", labels: { boxWidth: 8, font: { size: 9 }, padding: 4 } },
           tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${fmt(ctx.parsed.y)}` } },
         },
         scales: {
-          x: { ticks: { font: { size: 9 } } },
-          y: { ticks: { font: { size: 9 }, callback: v => v.toLocaleString("ja-JP") } },
+          x: { stacked: true, ticks: { font: { size: 9 } } },
+          y: { stacked: true, ticks: { font: { size: 9 }, callback: v => v.toLocaleString("ja-JP") } },
         },
       },
     });
