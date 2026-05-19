@@ -566,9 +566,9 @@ const DASHBOARD_SECTIONS = [
     },
     splitByHoujin: ["現預金"],
   },
-  // 借入金推移 - 長期借入金は法人別分割、短期借入金は4法人重ね
+  // 長期借入金推移 - 法人別4チャート分割
   {
-    title: "⑧借入金推移（4法人BS・年度末残高）",
+    title: "⑧長期借入金推移（4法人別BS・年度末残高）",
     sheet: null,
     isBS: true,
     bsSheets: {
@@ -578,14 +578,13 @@ const DASHBOARD_SECTIONS = [
       "（社福）明和福祉会": "社福　全体(BS)",
     },
     items: {
-      "短期借入金": "短期借入金",
       "長期借入金": "長期借入金",
     },
     splitByHoujin: ["長期借入金"],
   },
-  // 有形固定資産推移 - 4法人重ね（設備投資の累計）
+  // 有形固定資産推移 - 法人別4チャート分割（設備投資の累計）
   {
-    title: "⑨有形固定資産推移（4法人BS・年度末残高）",
+    title: "⑨有形固定資産推移（4法人別BS・年度末残高）",
     sheet: null,
     isBS: true,
     bsSheets: {
@@ -597,6 +596,7 @@ const DASHBOARD_SECTIONS = [
     items: {
       "有形固定資産（簿価）": "有形固定資産（簿価）",
     },
+    splitByHoujin: ["有形固定資産（簿価）"],
   },
 ];
 
@@ -738,7 +738,7 @@ function renderBSDashboardSection(grid, section) {
         if (monthKeys.length === 0) continue;
         const maxKey = Math.max(...monthKeys.map(Number));
         const yearEnd = months[String(maxKey)];
-        if (typeof yearEnd === "number" && yearEnd !== 0) {
+        if (typeof yearEnd === "number") {
           houjinData[houjinLabel][yearLabel] = yearEnd;
           allYears.add(yearLabel);
         }
