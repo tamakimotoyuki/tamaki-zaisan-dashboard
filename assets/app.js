@@ -534,9 +534,9 @@ const DASHBOARD_SECTIONS = [
       "サービス活動収益": ["サービス活動収益", "事業収益合計"],
     },
   },
-  // 純資産推移 - 4法人BSから抽出（横断・最重要KPI）
+  // 純資産推移 - 法人別4チャート分割（最重要KPI）
   {
-    title: "⑥純資産推移（4法人BS・年度末残高）",
+    title: "⑥純資産推移（4法人別BS・年度末残高）",
     sheet: null,
     isBS: true,
     bsSheets: {
@@ -548,10 +548,11 @@ const DASHBOARD_SECTIONS = [
     items: {
       "純資産": "純資産",
     },
+    splitByHoujin: ["純資産"],
   },
-  // 流動資産推移 - 4法人BS（現預金・医業未収金・棚卸資産）
+  // 現預金推移 - 4法人重ね（流動性KPI）
   {
-    title: "⑦流動資産推移（4法人BS・年度末残高）",
+    title: "⑦現預金推移（4法人BS・年度末残高）",
     sheet: null,
     isBS: true,
     bsSheets: {
@@ -562,11 +563,9 @@ const DASHBOARD_SECTIONS = [
     },
     items: {
       "現預金": "現預金",
-      "医業未収金": "医業未収金",
-      "棚卸資産": "棚卸資産",
     },
   },
-  // 借入金・固定資産推移 - 4法人BS
+  // 借入金・固定資産推移 - 長期借入金は法人別分割、他は4法人重ね
   {
     title: "⑧借入金・固定資産推移（4法人BS・年度末残高）",
     sheet: null,
@@ -582,6 +581,7 @@ const DASHBOARD_SECTIONS = [
       "長期借入金": "長期借入金",
       "有形固定資産（簿価）": "有形固定資産（簿価）",
     },
+    splitByHoujin: ["長期借入金"],
   },
 ];
 
@@ -705,21 +705,10 @@ function renderBSDashboardSection(grid, section) {
   chartsDiv.className = "dashboard-charts";
   sec.appendChild(chartsDiv);
 
+  const splitItems = new Set(section.splitByHoujin || []);
+
   // 各項目について4法人重ね折れ線グラフ
   for (const [label, itemKey] of Object.entries(section.items)) {
-    const cdiv = document.createElement("div");
-    cdiv.className = "dashboard-chart";
-    const t = document.createElement("div");
-    t.className = "dashboard-chart-title";
-    t.textContent = label + "（年度末月末残高）";
-    cdiv.appendChild(t);
-    const wrap = document.createElement("div");
-    wrap.className = "dashboard-chart-canvas";
-    const canvas = document.createElement("canvas");
-    wrap.appendChild(canvas);
-    cdiv.appendChild(wrap);
-    chartsDiv.appendChild(cdiv);
-
     // 全法人で利用可能な年度ラベルを収集
     const allYears = new Set();
     const houjinData = {}; // houjinLabel -> {year -> value (年度末月)}
@@ -730,7 +719,6 @@ function renderBSDashboardSection(grid, section) {
       houjinData[houjinLabel] = {};
       for (const yearLabel of Object.keys(block)) {
         const months = block[yearLabel] || {};
-        // 11=年度最終月 (3月末 or 4月末)
         const monthKeys = Object.keys(months).filter(k => /^\d+$/.test(k));
         if (monthKeys.length === 0) continue;
         const maxKey = Math.max(...monthKeys.map(Number));
@@ -742,15 +730,85 @@ function renderBSDashboardSection(grid, section) {
       }
     }
 
-    // 年度を時系列ソート (古→新)
     const sortedYears = Array.from(allYears).sort((a, b) => yearOrderKey(a) - yearOrderKey(b));
     const yearDisplays = sortedYears.map(y => yearLabelDisplay(y));
+    const houjinLabels = Object.keys(section.bsSheets);
 
-    // 法人別データセット
-    const houjinLabels = Object.keys(houjinData);
+    if (splitItems.has(label)) {
+      // 法人別4チャート分割
+      houjinLabels.forEach((hLabel, idx) => {
+        const cdiv = document.createElement("div");
+        cdiv.className = "dashboard-chart";
+        const t = document.createElement("div");
+        t.className = "dashboard-chart-title";
+        t.textContent = `${label} - ${hLabel}（年度末月末残高）`;
+        cdiv.appendChild(t);
+        const wrap = document.createElement("div");
+        wrap.className = "dashboard-chart-canvas";
+        const canvas = document.createElement("canvas");
+        wrap.appendChild(canvas);
+        cdiv.appendChild(wrap);
+        chartsDiv.appendChild(cdiv);
+
+        const data = sortedYears.map(y => houjinData[hLabel]?.[y] ?? null);
+        if (data.every(v => v === null)) {
+          const e = document.createElement("div");
+          e.className = "dashboard-chart-empty";
+          e.textContent = "BSデータなし";
+          cdiv.appendChild(e);
+          return;
+        }
+        const color = yearColor(idx, houjinLabels.length);
+        const c = new Chart(canvas.getContext("2d"), {
+          type: "line",
+          data: {
+            labels: yearDisplays,
+            datasets: [{
+              label: hLabel,
+              data,
+              backgroundColor: color,
+              borderColor: color,
+              borderWidth: 2,
+              tension: 0.1,
+              spanGaps: true,
+            }],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+            plugins: {
+              legend: { display: false },
+              tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${fmt(ctx.parsed.y)}` } },
+            },
+            scales: {
+              x: { ticks: { font: { size: 10 } } },
+              y: { ticks: { font: { size: 9 }, callback: v => v.toLocaleString("ja-JP") } },
+            },
+          },
+        });
+        dashboardCharts.push(c);
+      });
+      continue;
+    }
+
+    // 4法人重ね（既定）
+    const cdiv = document.createElement("div");
+    cdiv.className = "dashboard-chart";
+    const t = document.createElement("div");
+    t.className = "dashboard-chart-title";
+    t.textContent = label + "(年度末月末残高)";
+    cdiv.appendChild(t);
+    const wrap = document.createElement("div");
+    wrap.className = "dashboard-chart-canvas";
+    const canvas = document.createElement("canvas");
+    wrap.appendChild(canvas);
+    cdiv.appendChild(wrap);
+    chartsDiv.appendChild(cdiv);
+
     const datasets = houjinLabels.map((hLabel, idx) => ({
       label: hLabel,
-      data: sortedYears.map(y => houjinData[hLabel][y] ?? null),
+      data: sortedYears.map(y => houjinData[hLabel]?.[y] ?? null),
       backgroundColor: yearColor(idx, houjinLabels.length),
       borderColor: yearColor(idx, houjinLabels.length),
       borderWidth: 2,
@@ -775,9 +833,7 @@ function renderBSDashboardSection(grid, section) {
         animation: false,
         plugins: {
           legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } },
-          tooltip: {
-            callbacks: { label: (ctx) => `${ctx.dataset.label}: ${fmt(ctx.parsed.y)}` },
-          },
+          tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${fmt(ctx.parsed.y)}` } },
         },
         scales: {
           x: { ticks: { font: { size: 10 } } },
