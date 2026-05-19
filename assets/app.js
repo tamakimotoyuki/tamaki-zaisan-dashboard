@@ -615,7 +615,7 @@ const DASHBOARD_SECTIONS = [
   },
   // 簡易営業CF (経常利益 + 減価償却費) - 法人別4チャート・スタック
   {
-    title: "⑪簡易営業CF推移（経常利益+減価償却費・月次スタック・最新年度）",
+    title: "⑪簡易営業CF推移（経常利益+減価償却費・月次スタック・全期間）",
     isStackedPL: true,
     houjinSheets: {
       "（医）明和会": "医）明和会　全体(PL)",
@@ -1144,16 +1144,15 @@ function renderStackedPLSection(grid, section) {
       const key = findFirstItem(sheet.blocks, item.candidates);
       return key ? sheet.blocks[key] : null;
     });
-    // 両項目で共通の年度
-    const commonYears = itemBlocks[0] && itemBlocks[1]
-      ? Object.keys(itemBlocks[0]).filter(y => y in itemBlocks[1])
+    // 経常利益(必須)のある年度すべてを時系列で連結する
+    const baseBlock = itemBlocks[0];
+    const allYears = baseBlock
+      ? dedupeYearsByDisplay(Object.keys(baseBlock)).slice().sort((a, b) => yearOrderKey(a) - yearOrderKey(b))
       : [];
-    const deduped = dedupeYearsByDisplay(commonYears);
-    const latestYear = deduped.slice().sort((a, b) => yearOrderKey(b) - yearOrderKey(a))[0];
 
-    t.textContent = `${hLabel} - 経常利益+減価償却費（月次・${latestYear ? yearLabelDisplay(latestYear) : "?"}）`;
+    t.textContent = `${hLabel} - 経常利益+減価償却費（月次・${allYears.length > 0 ? `${yearLabelDisplay(allYears[0])}〜${yearLabelDisplay(allYears[allYears.length - 1])}` : "?"}）`;
 
-    if (!latestYear) {
+    if (allYears.length === 0) {
       const e = document.createElement("div");
       e.className = "dashboard-chart-empty";
       e.textContent = "PLデータなし";
@@ -1161,20 +1160,35 @@ function renderStackedPLSection(grid, section) {
       return;
     }
 
+    const monthStart = detectSheetMonthStart(sheet);
+    const monthsTpl = getMonthLabels(monthStart);
+
+    // 連結X軸ラベル ("R7 4月" 形式)
+    const xLabels = [];
+    allYears.forEach(y => {
+      const yDisp = yearLabelDisplay(y);
+      for (let m = 0; m < 12; m++) xLabels.push(`${yDisp} ${monthsTpl[m]}`);
+    });
+
     const datasets = section.stackItems.map((item, i) => {
       const block = itemBlocks[i];
       const color = i === 0 ? "rgba(20,60,120,0.92)" : "rgba(120,170,220,0.85)";
-      let data;
-      if (!block) {
-        data = new Array(12).fill(null);
-      } else if (item.evenDistribute) {
-        // 年度合計を12等分 (記帳パターン差を吸収・経常利益とstackしやすくする)
-        const annual = annualSumFromBlock(block, latestYear);
-        const monthly = (annual ?? 0) / 12;
-        data = new Array(12).fill(annual === null ? null : monthly);
-      } else {
-        data = monthArray(block[latestYear]);
-      }
+      const data = [];
+      allYears.forEach(y => {
+        const months = block?.[y];
+        if (!months) {
+          for (let m = 0; m < 12; m++) data.push(null);
+        } else if (item.evenDistribute) {
+          const annual = annualSumFromBlock(block, y);
+          const monthly = annual === null ? null : annual / 12;
+          for (let m = 0; m < 12; m++) data.push(monthly);
+        } else {
+          for (let m = 0; m < 12; m++) {
+            const v = months[String(m)];
+            data.push(typeof v === "number" ? v : null);
+          }
+        }
+      });
       return {
         label: item.label + (item.evenDistribute ? "（年合計÷12）" : ""),
         data,
@@ -1184,11 +1198,9 @@ function renderStackedPLSection(grid, section) {
         stack: "cf",
       };
     });
-
-    const monthLabels = getMonthLabels(detectSheetMonthStart(sheet));
     const c = new Chart(canvas.getContext("2d"), {
       type: "bar",
-      data: { labels: monthLabels, datasets },
+      data: { labels: xLabels, datasets },
       options: {
         responsive: true, maintainAspectRatio: false, animation: false,
         plugins: {
@@ -1196,7 +1208,7 @@ function renderStackedPLSection(grid, section) {
           tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${fmt(ctx.parsed.y)}` } },
         },
         scales: {
-          x: { stacked: true, ticks: { font: { size: 10 } } },
+          x: { stacked: true, ticks: { font: { size: 8 }, maxRotation: 90, minRotation: 60, autoSkip: true, maxTicksLimit: 30 } },
           y: { stacked: true, ticks: { font: { size: 9 }, callback: v => v.toLocaleString("ja-JP") } },
         },
       },
