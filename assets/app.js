@@ -1214,9 +1214,10 @@ function renderCFSection(grid, section) {
 
   const houjinLabels = Object.keys(section.houjinPlSheets);
   houjinLabels.forEach((hLabel, idx) => {
-    // 法人別年度集合 (4月始まり/5月始まり混在を防ぐ)
+    // X軸はBS年度に限定 (投資CF/財務CF計算が可能な年度のみ表示・空白X軸抑制)
+    // BS 有形固定資産+借入金 のいずれかにデータがある年度を集める
     const hYears = new Set();
-    [keijo, genka, bvAsset, longLoan, shortLoan].forEach(d => {
+    [bvAsset, longLoan, shortLoan].forEach(d => {
       const v = d.result[hLabel] || {};
       Object.keys(v).forEach(y => hYears.add(y));
     });
