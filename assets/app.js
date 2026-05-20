@@ -582,6 +582,9 @@ const DASHBOARD_SECTIONS = [
     },
     splitByHoujin: ["長期借入金"],
     fillMissingAsZero: ["長期借入金"],
+    barChart: true,   // 棒グラフ
+    yMin0: true,      // Y軸0底辺(借入金は非負)
+    minYear: "R2",    // R2以降に統一
   },
   // 有形固定資産推移 - 法人別4チャート分割（設備投資の累計）
   {
@@ -598,6 +601,9 @@ const DASHBOARD_SECTIONS = [
       "有形固定資産（簿価）": "有形固定資産（簿価）",
     },
     splitByHoujin: ["有形固定資産（簿価）"],
+    barChart: true,   // 棒グラフ
+    yMin0: true,      // Y軸0底辺(簿価は非負)
+    minYear: "R2",    // R2以降に統一
   },
   // 減価償却費推移 - 法人別4チャート分割（PL年度合計）
   {
@@ -612,6 +618,7 @@ const DASHBOARD_SECTIONS = [
     items: {
       "減価償却費": ["減価償却費"],
     },
+    minYear: "R2",  // R2以降に統一
   },
   // 簡易営業CF (経常利益 + 減価償却費) - 法人別4チャート・スタック
   {
@@ -632,6 +639,7 @@ const DASHBOARD_SECTIONS = [
   {
     title: "⑫簡易キャッシュフロー推移（営業/投資/財務・年度概算）",
     isCF: true,
+    minYear: "R2",  // R2以降に統一
     houjinPlSheets: {
       "（医）明和会": "医）明和会　全体(PL)",
       "（医）メディエンス": "メディエンス　全体(PL)",
@@ -639,17 +647,6 @@ const DASHBOARD_SECTIONS = [
       "（社福）明和福祉会": "社福　全体(PL)",
     },
     houjinBsSheets: {
-      "（医）明和会": "医）明和会　全体(BS)",
-      "（医）メディエンス": "メディエンス　全体(BS)",
-      "MS": "MS　全体(BS)",
-      "（社福）明和福祉会": "社福　全体(BS)",
-    },
-  },
-  // 借入金増減 (新規借入 vs 返済) - 法人別4チャート (InputSlip Dr/Cr分離)
-  {
-    title: "⑬借入金増減推移（新規借入 vs 返済・年度別・短期+長期合算）",
-    isBorrowFlow: true,
-    houjinSheets: {
       "（医）明和会": "医）明和会　全体(BS)",
       "（医）メディエンス": "メディエンス　全体(BS)",
       "MS": "MS　全体(BS)",
@@ -868,8 +865,13 @@ function renderBSDashboardSection(grid, section) {
         chartsDiv.appendChild(cdiv);
 
         // この法人の年度キーのみで X軸を構築 (グローバル dedup を使わない)
-        const myYears = dedupeYearsByDisplay(Object.keys(houjinData[hLabel] || {}))
+        let myYears = dedupeYearsByDisplay(Object.keys(houjinData[hLabel] || {}))
           .slice().sort((a, b) => yearOrderKey(a) - yearOrderKey(b));
+        // minYear指定があれば、その年以降に絞る (例: R2以降に統一)
+        if (section.minYear) {
+          const minKey = yearOrderKey(section.minYear === "R2" ? "2.4-3.3" : section.minYear);
+          myYears = myYears.filter(y => yearOrderKey(y) >= minKey);
+        }
         const myDisplays = myYears.map(y => yearLabelDisplay(y));
         const data = myYears.map(y => houjinData[hLabel]?.[y] ?? null);
 
@@ -881,8 +883,9 @@ function renderBSDashboardSection(grid, section) {
           return;
         }
         const color = yearColor(idx, houjinLabels.length);
+        const isBar = !!section.barChart;
         const c = new Chart(canvas.getContext("2d"), {
-          type: "line",
+          type: isBar ? "bar" : "line",
           data: {
             labels: myDisplays,
             datasets: [{
@@ -890,7 +893,7 @@ function renderBSDashboardSection(grid, section) {
               data,
               backgroundColor: color,
               borderColor: color,
-              borderWidth: 2,
+              borderWidth: isBar ? 1 : 2,
               tension: 0.1,
               spanGaps: true,
             }],
@@ -905,7 +908,8 @@ function renderBSDashboardSection(grid, section) {
             },
             scales: {
               x: { ticks: { font: { size: 10 } } },
-              y: { ticks: { font: { size: 9 }, callback: v => v.toLocaleString("ja-JP") } },
+              y: { beginAtZero: !!section.yMin0, min: section.yMin0 ? 0 : undefined,
+                   ticks: { font: { size: 9 }, callback: v => v.toLocaleString("ja-JP") } },
             },
           },
         });
@@ -1081,8 +1085,12 @@ function renderPLAnnualSection(grid, section) {
         return;
       }
       const block = sheet.blocks[itemKey];
-      const years = dedupeYearsByDisplay(Object.keys(block))
+      let years = dedupeYearsByDisplay(Object.keys(block))
         .slice().sort((a, b) => yearOrderKey(a) - yearOrderKey(b));
+      if (section.minYear) {
+        const minKey = yearOrderKey(section.minYear === "R2" ? "2.4-3.3" : section.minYear);
+        years = years.filter(y => yearOrderKey(y) >= minKey);
+      }
 
       if (years.length === 0) {
         t.textContent = `${label} - ${hLabel}`;
@@ -1187,7 +1195,7 @@ function renderStackedPLSection(grid, section) {
       ? dedupeYearsByDisplay(Object.keys(baseBlock)).slice().sort((a, b) => yearOrderKey(b) - yearOrderKey(a))
       : [];
 
-    t.textContent = `${hLabel} - 経常利益+減価償却費（月次・年度色分け・減価償却=年合計÷12）`;
+    t.textContent = `${hLabel} - 経常利益+減価償却費`;
 
     if (years.length === 0) {
       const e = document.createElement("div");
@@ -1247,7 +1255,17 @@ function renderStackedPLSection(grid, section) {
       options: {
         responsive: true, maintainAspectRatio: false, animation: false,
         plugins: {
-          legend: { position: "bottom", labels: { boxWidth: 8, font: { size: 9 }, padding: 4 } },
+          legend: {
+            position: "bottom",
+            labels: {
+              boxWidth: 12, font: { size: 11 },
+              // 凡例は「経常利益(青)」「減価償却(黄)」の2つだけに集約
+              generateLabels: () => [
+                { text: "経常利益", fillStyle: "rgba(20,60,120,0.92)", strokeStyle: "rgba(20,60,120,0.92)" },
+                { text: "減価償却（年合計÷12）", fillStyle: "rgba(210,170,60,0.9)", strokeStyle: "rgba(210,170,60,0.9)" },
+              ],
+            },
+          },
           tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${fmt(ctx.parsed.y)}` } },
         },
         scales: {
@@ -1313,7 +1331,11 @@ function renderCFSection(grid, section) {
       const v = d.result[hLabel] || {};
       Object.keys(v).forEach(y => hYears.add(y));
     });
-    const sortedYears = dedupeYearsByDisplay(Array.from(hYears)).sort((a, b) => yearOrderKey(a) - yearOrderKey(b));
+    let sortedYears = dedupeYearsByDisplay(Array.from(hYears)).sort((a, b) => yearOrderKey(a) - yearOrderKey(b));
+    if (section.minYear) {
+      const minKey = yearOrderKey(section.minYear === "R2" ? "2.4-3.3" : section.minYear);
+      sortedYears = sortedYears.filter(y => yearOrderKey(y) >= minKey);
+    }
     const yearDisplays = sortedYears.map(y => yearLabelDisplay(y));
 
     const cdiv = document.createElement("div");
