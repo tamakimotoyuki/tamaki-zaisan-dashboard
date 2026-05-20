@@ -1280,7 +1280,7 @@ function renderCFSection(grid, section) {
     "<b>営業CF</b> = 税引前当期純損益 + 減価償却費 + Δ各種引当金(貸倒/賞与/退職給付)<br>" +
     "&nbsp;&nbsp;&nbsp;− 法人税等支払額(=発生額−Δ未払法人税等) − Δ売上債権 − Δ棚卸資産<br>" +
     "&nbsp;&nbsp;&nbsp;+ Δ未払金 ± Δその他運転資本(前払/前受/預り金/未収入金等)<br>" +
-    "<b>投資CF</b> = −(Δ有形固定資産簿価 + 減価償却費) ≒ −CAPEX (売却・無形は無視)<br>" +
+    "<b>投資CF</b> = −(Δ有形固定資産簿価 + 減価償却費) − Δ投資その他資産(出資金/敷金/無形等) + 固定資産売却益<br>" +
     "<b>財務CF</b> = Δ長期借入金 + Δ短期借入金 − Δ役員貸付金 − Δ関係会社債権 + Δ関係会社債務<br>" +
     "<span style='color:#999'>※引当金・運転資本変動はPCA仕訳明細(InputSlip)から取得。R7末は決算未確定のため参考値。</span>";
   sec.appendChild(note);
@@ -1380,14 +1380,19 @@ function renderCFSection(grid, section) {
         // その他運転資本 (純増減ベース・資産増=CF減/負債増=CF増)
         op -= netChg("その他流動資産_純増減", y);
         op += netChg("その他流動負債_純増減", y);
+        // 固定資産売却損益は非営業 → 営業CFから除外 (投資CFへ振替)
+        op -= netChg("固定資産売却損益_純増減", y);
         opCF.push(op);
       } else opCF.push(null);
 
-      // 投資CF = -(Δ有形固定資産 + 減価償却費)
+      // 投資CF = -(Δ有形固定資産 + 減価償却費) − Δ投資その他資産 + 固定資産売却益
       if (prevY && has(bvAsset, y, prevY)) {
         const dBV = bvAsset.result[hLabel][y] - bvAsset.result[hLabel][prevY];
         const gv = typeof g === "number" ? g : 0;
-        invCF.push(-(dBV + gv));
+        let iv = -(dBV + gv);
+        iv -= netChg("投資その他資産_純増減", y);     // 投資資産増=投資CF減
+        iv += netChg("固定資産売却損益_純増減", y);   // 売却益=売却収入の上乗せ分
+        invCF.push(iv);
       } else invCF.push(null);
 
       // 財務CF = Δ借入金 − Δ役員貸付金 − Δ関係会社債権 + Δ関係会社債務
