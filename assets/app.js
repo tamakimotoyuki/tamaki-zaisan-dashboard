@@ -634,6 +634,7 @@ const DASHBOARD_SECTIONS = [
       { label: "経常利益", candidates: ["経常利益", "経常損益"] },
       { label: "減価償却費", candidates: ["減価償却費"], evenDistribute: true },
     ],
+    minYear: "R2",  // R2以降に統一
   },
   // 簡易キャッシュフロー (営業/投資/財務) - 法人別4チャート
   {
@@ -1191,9 +1192,13 @@ function renderStackedPLSection(grid, section) {
     });
     // 経常利益(必須)のある年度 (新→旧で年度色分け)
     const baseBlock = itemBlocks[0];
-    const years = baseBlock
+    let years = baseBlock
       ? dedupeYearsByDisplay(Object.keys(baseBlock)).slice().sort((a, b) => yearOrderKey(b) - yearOrderKey(a))
       : [];
+    if (section.minYear) {
+      const minKey = yearOrderKey(section.minYear === "R2" ? "2.4-3.3" : section.minYear);
+      years = years.filter(y => yearOrderKey(y) >= minKey);
+    }
 
     t.textContent = `${hLabel} - 経常利益+減価償却費`;
 
