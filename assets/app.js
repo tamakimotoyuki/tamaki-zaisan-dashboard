@@ -1260,18 +1260,21 @@ function renderCFSection(grid, section) {
   // 注記
   const note = document.createElement("p");
   note.style.cssText = "color:#666;font-size:11px;margin:4px 0 8px;";
-  note.innerHTML = "※間接法簡易CF。<br>" +
-    "営業CF = 経常利益 + 減価償却費 − Δ医業未収金 − Δ棚卸資産 + Δ未払金等<br>" +
+  note.innerHTML = "※間接法簡易CF。起点は税引前当期純損益 (なければ経常損益で代替)。<br>" +
+    "営業CF = 税引前当期純損益 + 減価償却費 − 法人税等支払額 − Δ医業未収金 − Δ棚卸資産 + Δ未払金等<br>" +
     "投資CF = −(Δ有形固定資産簿価 + 減価償却費) ≒ −CAPEX (売却・無形は無視)<br>" +
-    "財務CF = Δ長期借入金 + Δ短期借入金 − Δ役員貸付金 − Δ関係会社債権 + Δ関係会社債務";
+    "財務CF = Δ長期借入金 + Δ短期借入金 − Δ役員貸付金 − Δ関係会社債権 + Δ関係会社債務<br>" +
+    "法人税等支払額 ≒ 税引前当期純損益 − 当期純損益 (会計発生額で代用)";
   sec.appendChild(note);
 
   const chartsDiv = document.createElement("div");
   chartsDiv.className = "dashboard-charts";
   sec.appendChild(chartsDiv);
 
-  // PL: 経常利益・減価償却費
+  // PL: 起点利益 (税引前当期純損益を優先・なければ経常損益) ・減価償却費・当期純損益
+  const pretax = extractHoujinAnnualSum(section.houjinPlSheets, ["税引前当期純利益", "税引前当期純損益"]);
   const keijo = extractHoujinAnnualSum(section.houjinPlSheets, ["経常利益", "経常損益"]);
+  const netInc = extractHoujinAnnualSum(section.houjinPlSheets, ["当期純利益", "当期純損益"]);
   const genka = extractHoujinAnnualSum(section.houjinPlSheets, ["減価償却費"]);
   // BS: 有形固定資産・借入金・運転資本・グループ間取引
   const bvAsset = extractHoujinYearEnd(section.houjinBsSheets, "有形固定資産（簿価）");
@@ -1286,7 +1289,7 @@ function renderCFSection(grid, section) {
 
   const houjinLabels = Object.keys(section.houjinPlSheets);
   houjinLabels.forEach((hLabel, idx) => {
-    // X軸はBS年度に限定 (投資CF/財務CF計算が可能な年度のみ表示・空白X軸抑制)
+    // X軸はBS年度に限定 (運転資本変動・投資CF・財務CF が計算できる年度のみ意味があるため)
     const hYears = new Set();
     [bvAsset, longLoan, shortLoan, recv, inv, payable, offLoan, grpRecv, grpPay].forEach(d => {
       const v = d.result[hLabel] || {};
@@ -1322,17 +1325,24 @@ function renderCFSection(grid, section) {
     };
     sortedYears.forEach((y, yi) => {
       const prevY = yi > 0 ? sortedYears[yi - 1] : null;
-      const k = keijo.result[hLabel]?.[y];
+      // 起点利益: 税引前優先・なければ経常損益
+      const pt = pretax.result[hLabel]?.[y];
+      const ke = keijo.result[hLabel]?.[y];
+      const baseProfit = typeof pt === "number" ? pt : (typeof ke === "number" ? ke : null);
+      const usingPretax = typeof pt === "number";
       const g = genka.result[hLabel]?.[y];
+      const ni = netInc.result[hLabel]?.[y];
 
-      // 営業CF = 経常利益 + 減価償却 − Δ医業未収金 − Δ棚卸資産 + Δ未払金
-      if (typeof k === "number") {
-        let op = k;
+      // 営業CF
+      if (typeof baseProfit === "number") {
+        let op = baseProfit;
         if (typeof g === "number") op += g;
+        // 法人税等支払額 ≒ 税引前 − 当期純 (税引前を使う場合のみ控除)
+        if (usingPretax && typeof ni === "number") op -= (pt - ni);
         if (prevY) {
-          op -= diff(recv, y, prevY);      // 売掛 ↑ は CF ↓
-          op -= diff(inv, y, prevY);       // 棚卸 ↑ は CF ↓
-          op += diff(payable, y, prevY);   // 未払 ↑ は CF ↑ (まだ払ってない=現金残ってる)
+          op -= diff(recv, y, prevY);
+          op -= diff(inv, y, prevY);
+          op += diff(payable, y, prevY);
         }
         opCF.push(op);
       } else opCF.push(null);
