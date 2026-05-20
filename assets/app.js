@@ -996,6 +996,27 @@ function annualSumFromBlock(block, year) {
   }
   return any ? sum : null;
 }
+// 減価償却の月次配列を返す (ハイブリッド)
+// ・実際に月次入力されている年度 → 生の月次値をそのまま
+// ・年度末に一括計上の年度 (旧年度) → 年合計÷12 で均す
+// 判定: 最終月の絶対値が「全月絶対値合計」の50%以上を占める or 月数1 → 一括 → ÷12
+function depreciationMonthlyArray(block, year) {
+  const months = block?.[year] || {};
+  const arr = new Array(12).fill(null);
+  let any = false, sumAbs = 0, lastAbs = 0, annual = 0, nonZero = 0;
+  for (let m = 0; m < 12; m++) {
+    const v = months[String(m)];
+    if (typeof v === "number") {
+      arr[m] = v; any = true; annual += v; sumAbs += Math.abs(v);
+      if (Math.abs(v) > 0) nonZero++;
+      if (m === 11) lastAbs = Math.abs(v);
+    }
+  }
+  if (!any) return arr;
+  const isLump = sumAbs > 0 && (nonZero <= 1 || (lastAbs / sumAbs) >= 0.5);
+  if (isLump) return new Array(12).fill(annual / 12);  // 旧年度: ÷12で均す
+  return arr;  // 新年度: 実月次
+}
 function yearEndFromBlock(block, year) {
   const months = block?.[year] || {};
   const keys = Object.keys(months).filter(k => /^\d+$/.test(k));
@@ -1102,24 +1123,24 @@ function renderPLAnnualSection(grid, section) {
         return;
       }
 
-      t.textContent = `${label} - ${hLabel}（月次・${yearLabelDisplay(years[0])}〜${yearLabelDisplay(years[years.length - 1])}・年合計÷12）`;
+      t.textContent = `${label} - ${hLabel}（月次・${yearLabelDisplay(years[0])}〜${yearLabelDisplay(years[years.length - 1])}・新年度=実月次/旧年度=÷12）`;
 
       const monthsTpl = getMonthLabels(detectSheetMonthStart(sheet));
       const xLabels = [];
       const data = [];
       years.forEach(y => {
         const yDisp = yearLabelDisplay(y);
-        const annual = annualSumFromBlock(block, y);
-        const monthly = annual === null ? null : annual / 12;
+        const mvals = depreciationMonthlyArray(block, y);  // 実月次 or ÷12 のハイブリッド
         // 累積モード時は年度内累積 (年度をまたぐとリセット)
         let acc = 0;
         for (let m = 0; m < 12; m++) {
           xLabels.push(`${yDisp} ${monthsTpl[m]}`);
+          const v = mvals[m];
           if (dashboardMode === "cumulative") {
-            if (monthly === null) data.push(null);
-            else { acc += monthly; data.push(acc); }
+            if (v === null) data.push(null);
+            else { acc += v; data.push(acc); }
           } else {
-            data.push(monthly);
+            data.push(v);
           }
         }
       });
@@ -1227,11 +1248,9 @@ function renderStackedPLSection(grid, section) {
         const v = keijoMonths[String(m)];
         if (typeof v === "number") keijoRaw[m] = v;
       }
-      // 減価償却 月次 (年合計÷12均等)
+      // 減価償却 月次 (新年度=実月次 / 旧年度=÷12 のハイブリッド)
       const genkaBlock = itemBlocks[1];
-      const genkaAnnual = genkaBlock ? annualSumFromBlock(genkaBlock, y) : null;
-      const genkaPerMonth = genkaAnnual === null ? null : genkaAnnual / 12;
-      const genkaRaw = new Array(12).fill(genkaPerMonth);
+      const genkaRaw = genkaBlock ? depreciationMonthlyArray(genkaBlock, y) : new Array(12).fill(null);
 
       const keijoData = dashboardMode === "cumulative" ? cumulative(keijoRaw) : keijoRaw;
       const genkaData = dashboardMode === "cumulative" ? cumulative(genkaRaw) : genkaRaw;
@@ -1267,7 +1286,7 @@ function renderStackedPLSection(grid, section) {
               // 凡例は「経常利益(青)」「減価償却(黄)」の2つだけに集約
               generateLabels: () => [
                 { text: "経常利益", fillStyle: "rgba(20,60,120,0.92)", strokeStyle: "rgba(20,60,120,0.92)" },
-                { text: "減価償却（年合計÷12）", fillStyle: "rgba(210,170,60,0.9)", strokeStyle: "rgba(210,170,60,0.9)" },
+                { text: "減価償却（新=実月次/旧=÷12）", fillStyle: "rgba(210,170,60,0.9)", strokeStyle: "rgba(210,170,60,0.9)" },
               ],
             },
           },
