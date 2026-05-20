@@ -1275,11 +1275,14 @@ function renderCFSection(grid, section) {
   // 注記
   const note = document.createElement("p");
   note.style.cssText = "color:#666;font-size:11px;margin:4px 0 8px;";
-  note.innerHTML = "※間接法簡易CF。起点は税引前当期純損益 (なければ経常損益で代替)。<br>" +
-    "営業CF = 税引前当期純損益 + 減価償却費 − 法人税等支払額 − Δ医業未収金 − Δ棚卸資産 + Δ未払金等<br>" +
-    "投資CF = −(Δ有形固定資産簿価 + 減価償却費) ≒ −CAPEX (売却・無形は無視)<br>" +
-    "財務CF = Δ長期借入金 + Δ短期借入金 − Δ役員貸付金 − Δ関係会社債権 + Δ関係会社債務<br>" +
-    "法人税等支払額 ≒ 税引前当期純損益 − 当期純損益 (会計発生額で代用)";
+  note.innerHTML =
+    "<b>【間接法CF・計算式】</b> 起点=税引前当期純損益 (なければ経常損益で代替)<br>" +
+    "<b>営業CF</b> = 税引前当期純損益 + 減価償却費 + Δ各種引当金(貸倒/賞与/退職給付)<br>" +
+    "&nbsp;&nbsp;&nbsp;− 法人税等支払額(=発生額−Δ未払法人税等) − Δ売上債権 − Δ棚卸資産<br>" +
+    "&nbsp;&nbsp;&nbsp;+ Δ未払金 ± Δその他運転資本(前払/前受/預り金/未収入金等)<br>" +
+    "<b>投資CF</b> = −(Δ有形固定資産簿価 + 減価償却費) ≒ −CAPEX (売却・無形は無視)<br>" +
+    "<b>財務CF</b> = Δ長期借入金 + Δ短期借入金 − Δ役員貸付金 − Δ関係会社債権 + Δ関係会社債務<br>" +
+    "<span style='color:#999'>※引当金・運転資本変動はPCA仕訳明細(InputSlip)から取得。R7末は決算未確定のため参考値。</span>";
   sec.appendChild(note);
 
   const chartsDiv = document.createElement("div");
@@ -1338,6 +1341,13 @@ function renderCFSection(grid, section) {
     const has = (src, y, prevY) => {
       return typeof src.result[hLabel]?.[y] === "number" && typeof src.result[hLabel]?.[prevY] === "number";
     };
+    // 純増減ブロック (InputSlip Dr/Cr由来・年合計は月11に格納) を読むヘルパー
+    const bsSheet = state.data.sheets[section.houjinBsSheets[hLabel]];
+    const netChg = (blockName, y) => {
+      const blk = bsSheet?.blocks?.[blockName];
+      const v = blk?.[y]?.["11"];
+      return typeof v === "number" ? v : 0;
+    };
     sortedYears.forEach((y, yi) => {
       const prevY = yi > 0 ? sortedYears[yi - 1] : null;
       // 起点利益: 税引前優先・なければ経常損益
@@ -1348,17 +1358,28 @@ function renderCFSection(grid, section) {
       const g = genka.result[hLabel]?.[y];
       const ni = netInc.result[hLabel]?.[y];
 
-      // 営業CF
+      // 営業CF (間接法・拡張版)
       if (typeof baseProfit === "number") {
         let op = baseProfit;
         if (typeof g === "number") op += g;
-        // 法人税等支払額 ≒ 税引前 − 当期純 (税引前を使う場合のみ控除)
-        if (usingPretax && typeof ni === "number") op -= (pt - ni);
+        // 法人税等支払額 ≒ 税引前 − 当期純 − Δ未払法人税等 (発生額→支払額へ補正)
+        if (usingPretax && typeof ni === "number") {
+          op -= (pt - ni);                       // 発生額を控除
+          op += netChg("未払法人税等_純増減", y);  // 未払増=未払い分を戻す
+        }
+        // 引当金 (非現金費用・足し戻し)
+        op += netChg("貸倒引当金_純増減", y);
+        op += netChg("賞与引当金_純増減", y);
+        op += netChg("退職給付引当金_純増減", y);
+        // 主要運転資本 (BS年度末残高差分)
         if (prevY) {
           op -= diff(recv, y, prevY);
           op -= diff(inv, y, prevY);
           op += diff(payable, y, prevY);
         }
+        // その他運転資本 (純増減ベース・資産増=CF減/負債増=CF増)
+        op -= netChg("その他流動資産_純増減", y);
+        op += netChg("その他流動負債_純増減", y);
         opCF.push(op);
       } else opCF.push(null);
 
