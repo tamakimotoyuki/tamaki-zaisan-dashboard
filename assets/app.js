@@ -549,6 +549,7 @@ const DASHBOARD_SECTIONS = [
       "純資産": "純資産",
     },
     splitByHoujin: ["純資産"],
+    minYear: "R2",  // 全法人R2スタートに統一
   },
   // 現預金推移 - 法人別4チャート分割（流動性KPI）
   {
@@ -565,6 +566,7 @@ const DASHBOARD_SECTIONS = [
       "現預金": "現預金",
     },
     splitByHoujin: ["現預金"],
+    minYear: "R2",  // 全法人R2スタートに統一
   },
   // 長期借入金推移 - 法人別4チャート分割（データ欠損は0扱い）
   {
@@ -850,7 +852,22 @@ function renderBSDashboardSection(grid, section) {
     const houjinLabels = Object.keys(section.bsSheets);
 
     if (splitItems.has(label)) {
-      // 法人別4チャート分割 — 各法人で自身の年度キーのみ使う (法人間のキー形式混在を防ぐ)
+      // 法人別4チャート分割 — 全法人で共通の表示軸(R2..最新)を使い、横軸を揃える
+      // 各法人は「displayラベル→値」で引く (法人間のキー形式 4月/5月始まり 混在を吸収)
+      const minKey = section.minYear
+        ? yearOrderKey(section.minYear === "R2" ? "2.4-3.3" : section.minYear)
+        : -Infinity;
+      const dispOrder = new Map();  // display -> orderKey
+      houjinLabels.forEach(hLabel => {
+        Object.keys(houjinData[hLabel] || {}).forEach(y => {
+          if (yearOrderKey(y) >= minKey) {
+            const disp = yearLabelDisplay(y);
+            if (!dispOrder.has(disp)) dispOrder.set(disp, yearOrderKey(y));
+          }
+        });
+      });
+      const commonDisplays = [...dispOrder.keys()].sort((a, b) => dispOrder.get(a) - dispOrder.get(b));
+
       houjinLabels.forEach((hLabel, idx) => {
         const cdiv = document.createElement("div");
         cdiv.className = "dashboard-chart";
@@ -865,16 +882,13 @@ function renderBSDashboardSection(grid, section) {
         cdiv.appendChild(wrap);
         chartsDiv.appendChild(cdiv);
 
-        // この法人の年度キーのみで X軸を構築 (グローバル dedup を使わない)
-        let myYears = dedupeYearsByDisplay(Object.keys(houjinData[hLabel] || {}))
-          .slice().sort((a, b) => yearOrderKey(a) - yearOrderKey(b));
-        // minYear指定があれば、その年以降に絞る (例: R2以降に統一)
-        if (section.minYear) {
-          const minKey = yearOrderKey(section.minYear === "R2" ? "2.4-3.3" : section.minYear);
-          myYears = myYears.filter(y => yearOrderKey(y) >= minKey);
-        }
-        const myDisplays = myYears.map(y => yearLabelDisplay(y));
-        const data = myYears.map(y => houjinData[hLabel]?.[y] ?? null);
+        // この法人の display→値 マップを作り、共通軸に沿って値を引く
+        const dispToVal = {};
+        Object.keys(houjinData[hLabel] || {}).forEach(y => {
+          dispToVal[yearLabelDisplay(y)] = houjinData[hLabel][y];
+        });
+        const myDisplays = commonDisplays;
+        const data = commonDisplays.map(disp => (disp in dispToVal ? dispToVal[disp] : null));
 
         if (data.every(v => v === null)) {
           const e = document.createElement("div");
