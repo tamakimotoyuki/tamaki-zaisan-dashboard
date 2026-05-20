@@ -645,6 +645,17 @@ const DASHBOARD_SECTIONS = [
       "（社福）明和福祉会": "社福　全体(BS)",
     },
   },
+  // 借入金増減 (新規借入 vs 返済) - 法人別4チャート (InputSlip Dr/Cr分離)
+  {
+    title: "⑬借入金増減推移（新規借入 vs 返済・年度別・短期+長期合算）",
+    isBorrowFlow: true,
+    houjinSheets: {
+      "（医）明和会": "医）明和会　全体(BS)",
+      "（医）メディエンス": "メディエンス　全体(BS)",
+      "MS": "MS　全体(BS)",
+      "（社福）明和福祉会": "社福　全体(BS)",
+    },
+  },
 ];
 
 let dashboardMode = "monthly"; // monthly | cumulative
@@ -682,6 +693,10 @@ function renderGlobalDashboard() {
     }
     if (section.isCF) {
       renderCFSection(grid, section);
+      continue;
+    }
+    if (section.isBorrowFlow) {
+      renderBorrowFlowSection(grid, section);
       continue;
     }
     const sheet = state.data.sheets[section.sheet];
@@ -1389,6 +1404,106 @@ function renderCFSection(grid, section) {
         plugins: {
           legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } },
           tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${fmt(ctx.parsed.y)}` } },
+        },
+        scales: {
+          x: { ticks: { font: { size: 10 } } },
+          y: { ticks: { font: { size: 9 }, callback: v => v.toLocaleString("ja-JP") } },
+        },
+      },
+    });
+    dashboardCharts.push(c);
+  });
+  grid.appendChild(sec);
+}
+
+// ---------- ⑬ 借入金増減 (新規借入 vs 返済) ----------
+// InputSlip Dr/Cr分離で取得した「短期借入_新規/返済」「長期借入_新規/返済」を集計
+// 新規借入(+, 上向き) と 返済(-, 下向き) を年度別に表示
+function renderBorrowFlowSection(grid, section) {
+  const sec = document.createElement("section");
+  sec.className = "dashboard-section";
+  const h = document.createElement("h2");
+  h.textContent = section.title;
+  sec.appendChild(h);
+  const note = document.createElement("p");
+  note.style.cssText = "color:#666;font-size:11px;margin:4px 0 8px;";
+  note.textContent = "※PCA仕訳明細(InputSlip)のDr/Cr分離で取得。新規借入(+)=期中の借入実行額、返済(−)=期中の返済額。短期+長期を合算。BS残高差分では見えない『借り換え』も把握できる。";
+  sec.appendChild(note);
+  const chartsDiv = document.createElement("div");
+  chartsDiv.className = "dashboard-charts";
+  sec.appendChild(chartsDiv);
+
+  const houjinLabels = Object.keys(section.houjinSheets);
+  houjinLabels.forEach((hLabel) => {
+    const sheetName = section.houjinSheets[hLabel];
+    const sheet = state.data.sheets[sheetName];
+
+    const cdiv = document.createElement("div");
+    cdiv.className = "dashboard-chart";
+    const t = document.createElement("div");
+    t.className = "dashboard-chart-title";
+    t.textContent = `${hLabel} - 借入金 新規 vs 返済（年度別）`;
+    cdiv.appendChild(t);
+    const wrap = document.createElement("div");
+    wrap.className = "dashboard-chart-canvas";
+    const canvas = document.createElement("canvas");
+    wrap.appendChild(canvas);
+    cdiv.appendChild(wrap);
+    chartsDiv.appendChild(cdiv);
+
+    const blocks = sheet?.blocks || {};
+    const newBorrowBlocks = ["短期借入金_新規借入", "長期借入金_新規借入"];
+    const repayBlocks = ["短期借入金_返済", "長期借入金_返済"];
+
+    // 年度収集
+    const years = new Set();
+    [...newBorrowBlocks, ...repayBlocks].forEach(bk => {
+      Object.keys(blocks[bk] || {}).forEach(y => years.add(y));
+    });
+    const sortedYears = dedupeYearsByDisplay(Array.from(years)).sort((a, b) => yearOrderKey(a) - yearOrderKey(b));
+
+    if (sortedYears.length === 0) {
+      const e = document.createElement("div");
+      e.className = "dashboard-chart-empty";
+      e.textContent = "借入金増減データなし";
+      cdiv.appendChild(e);
+      return;
+    }
+
+    const annualOf = (blockName, y) => {
+      const blk = blocks[blockName];
+      if (!blk || !blk[y]) return 0;
+      // 年合計は月11に格納
+      const v = blk[y]["11"];
+      return typeof v === "number" ? v : 0;
+    };
+
+    const newData = sortedYears.map(y => newBorrowBlocks.reduce((s, bk) => s + annualOf(bk, y), 0));
+    const repayData = sortedYears.map(y => -repayBlocks.reduce((s, bk) => s + annualOf(bk, y), 0)); // 返済はマイナス表示
+
+    if (newData.every(v => v === 0) && repayData.every(v => v === 0)) {
+      const e = document.createElement("div");
+      e.className = "dashboard-chart-empty";
+      e.textContent = "借入金の動きなし";
+      cdiv.appendChild(e);
+      return;
+    }
+
+    const yearDisplays = sortedYears.map(y => yearLabelDisplay(y));
+    const c = new Chart(canvas.getContext("2d"), {
+      type: "bar",
+      data: {
+        labels: yearDisplays,
+        datasets: [
+          { label: "新規借入", data: newData, backgroundColor: "rgba(46,134,193,0.85)", borderColor: "rgba(46,134,193,1)", borderWidth: 1 },
+          { label: "返済", data: repayData, backgroundColor: "rgba(231,76,60,0.8)", borderColor: "rgba(231,76,60,1)", borderWidth: 1 },
+        ],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: false,
+        plugins: {
+          legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } },
+          tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${fmt(Math.abs(ctx.parsed.y))}` } },
         },
         scales: {
           x: { ticks: { font: { size: 10 } } },
