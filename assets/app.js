@@ -1260,7 +1260,10 @@ function renderCFSection(grid, section) {
   // 注記
   const note = document.createElement("p");
   note.style.cssText = "color:#666;font-size:11px;margin:4px 0 8px;";
-  note.textContent = "※簡易計算 (運転資本変動・除却影響は無視)。営業CF=経常利益+減価償却費 / 投資CF=-(Δ有形固定資産+減価償却費) / 財務CF=Δ長期借入金+Δ短期借入金。";
+  note.innerHTML = "※間接法簡易CF。<br>" +
+    "営業CF = 経常利益 + 減価償却費 − Δ医業未収金 − Δ棚卸資産 + Δ未払金等<br>" +
+    "投資CF = −(Δ有形固定資産簿価 + 減価償却費) ≒ −CAPEX (売却・無形は無視)<br>" +
+    "財務CF = Δ長期借入金 + Δ短期借入金 − Δ役員貸付金 − Δ関係会社債権 + Δ関係会社債務";
   sec.appendChild(note);
 
   const chartsDiv = document.createElement("div");
@@ -1270,17 +1273,22 @@ function renderCFSection(grid, section) {
   // PL: 経常利益・減価償却費
   const keijo = extractHoujinAnnualSum(section.houjinPlSheets, ["経常利益", "経常損益"]);
   const genka = extractHoujinAnnualSum(section.houjinPlSheets, ["減価償却費"]);
-  // BS: 有形固定資産・長期借入金・短期借入金
+  // BS: 有形固定資産・借入金・運転資本・グループ間取引
   const bvAsset = extractHoujinYearEnd(section.houjinBsSheets, "有形固定資産（簿価）");
   const longLoan = extractHoujinYearEnd(section.houjinBsSheets, "長期借入金");
   const shortLoan = extractHoujinYearEnd(section.houjinBsSheets, "短期借入金");
+  const recv = extractHoujinYearEnd(section.houjinBsSheets, "医業未収金");
+  const inv = extractHoujinYearEnd(section.houjinBsSheets, "棚卸資産");
+  const payable = extractHoujinYearEnd(section.houjinBsSheets, "未払金・未払費用");
+  const offLoan = extractHoujinYearEnd(section.houjinBsSheets, "役員貸付金");
+  const grpRecv = extractHoujinYearEnd(section.houjinBsSheets, "関係会社債権");
+  const grpPay = extractHoujinYearEnd(section.houjinBsSheets, "関係会社債務");
 
   const houjinLabels = Object.keys(section.houjinPlSheets);
   houjinLabels.forEach((hLabel, idx) => {
     // X軸はBS年度に限定 (投資CF/財務CF計算が可能な年度のみ表示・空白X軸抑制)
-    // BS 有形固定資産+借入金 のいずれかにデータがある年度を集める
     const hYears = new Set();
-    [bvAsset, longLoan, shortLoan].forEach(d => {
+    [bvAsset, longLoan, shortLoan, recv, inv, payable, offLoan, grpRecv, grpPay].forEach(d => {
       const v = d.result[hLabel] || {};
       Object.keys(v).forEach(y => hYears.add(y));
     });
@@ -1303,30 +1311,48 @@ function renderCFSection(grid, section) {
     const opCF = [];
     const invCF = [];
     const finCF = [];
+    // 両年度ともBSにある時だけ差分を加算するヘルパー
+    const diff = (src, y, prevY) => {
+      const a = src.result[hLabel]?.[y];
+      const b = src.result[hLabel]?.[prevY];
+      return (typeof a === "number" && typeof b === "number") ? (a - b) : 0;
+    };
+    const has = (src, y, prevY) => {
+      return typeof src.result[hLabel]?.[y] === "number" && typeof src.result[hLabel]?.[prevY] === "number";
+    };
     sortedYears.forEach((y, yi) => {
       const prevY = yi > 0 ? sortedYears[yi - 1] : null;
       const k = keijo.result[hLabel]?.[y];
       const g = genka.result[hLabel]?.[y];
-      // 営業CF
-      opCF.push((typeof k === "number" && typeof g === "number") ? k + g : (typeof k === "number" ? k : null));
 
-      // 投資CF (前年比較必要)
-      if (prevY && typeof bvAsset.result[hLabel]?.[y] === "number" && typeof bvAsset.result[hLabel]?.[prevY] === "number") {
+      // 営業CF = 経常利益 + 減価償却 − Δ医業未収金 − Δ棚卸資産 + Δ未払金
+      if (typeof k === "number") {
+        let op = k;
+        if (typeof g === "number") op += g;
+        if (prevY) {
+          op -= diff(recv, y, prevY);      // 売掛 ↑ は CF ↓
+          op -= diff(inv, y, prevY);       // 棚卸 ↑ は CF ↓
+          op += diff(payable, y, prevY);   // 未払 ↑ は CF ↑ (まだ払ってない=現金残ってる)
+        }
+        opCF.push(op);
+      } else opCF.push(null);
+
+      // 投資CF = -(Δ有形固定資産 + 減価償却費)
+      if (prevY && has(bvAsset, y, prevY)) {
         const dBV = bvAsset.result[hLabel][y] - bvAsset.result[hLabel][prevY];
         const gv = typeof g === "number" ? g : 0;
         invCF.push(-(dBV + gv));
       } else invCF.push(null);
 
-      // 財務CF: 両年度ともBSデータ必須 (片方欠損で全額計上する不具合を防ぐ)
+      // 財務CF = Δ借入金 − Δ役員貸付金 − Δ関係会社債権 + Δ関係会社債務
       if (prevY) {
         let fin = 0;
         let any = false;
-        const llY = longLoan.result[hLabel]?.[y];
-        const llP = longLoan.result[hLabel]?.[prevY];
-        const slY = shortLoan.result[hLabel]?.[y];
-        const slP = shortLoan.result[hLabel]?.[prevY];
-        if (typeof llY === "number" && typeof llP === "number") { fin += (llY - llP); any = true; }
-        if (typeof slY === "number" && typeof slP === "number") { fin += (slY - slP); any = true; }
+        if (has(longLoan, y, prevY))  { fin += diff(longLoan, y, prevY); any = true; }
+        if (has(shortLoan, y, prevY)) { fin += diff(shortLoan, y, prevY); any = true; }
+        if (has(offLoan, y, prevY))   { fin -= diff(offLoan, y, prevY); any = true; } // 役員貸付↑=CF↓ (法人から流出)
+        if (has(grpRecv, y, prevY))   { fin -= diff(grpRecv, y, prevY); any = true; } // 関係会社債権↑=CF↓
+        if (has(grpPay, y, prevY))    { fin += diff(grpPay, y, prevY); any = true; }  // 関係会社債務↑=CF↑
         finCF.push(any ? fin : null);
       } else finCF.push(null);
     });
