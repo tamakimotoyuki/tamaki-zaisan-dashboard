@@ -175,6 +175,41 @@ function sortItems(items) {
   });
 }
 
+// ブロックの種別判定（BSタブ整理用）
+//  empty   : 全年度・全月が0/空 → 非表示にする
+//  annual  : 各年度で「年度末月(=最大月index)」だけに値 → 決算期のみの年間値(CF/純増減系)
+//  monthly : それ以外（月次残高あり）
+function classifyBlockKind(block) {
+  let anyNonZero = false, anyNonYearEnd = false;
+  for (const y of Object.keys(block || {})) {
+    const months = block[y] || {};
+    const idxs = Object.keys(months).filter(k => /^\d+$/.test(k)).map(Number);
+    if (!idxs.length) continue;
+    const maxIdx = Math.max(...idxs);
+    for (const i of idxs) {
+      const v = months[String(i)];
+      if (typeof v === "number" && v !== 0) {
+        anyNonZero = true;
+        if (i !== maxIdx) anyNonYearEnd = true;
+      }
+    }
+  }
+  if (!anyNonZero) return "empty";
+  return anyNonYearEnd ? "monthly" : "annual";
+}
+
+// BS月次残高項目の表示順（資産→負債→純資産。リスト外は五十音）
+const BS_STOCK_ORDER = [
+  "現預金", "医業未収金", "棚卸資産", "有形固定資産（簿価）",
+  "未払金・未払費用", "短期借入金", "長期借入金", "純資産",
+];
+const BS_STOCK_RANK = Object.fromEntries(BS_STOCK_ORDER.map((k, i) => [k, i]));
+function bsStockSort(a, b) {
+  const ra = BS_STOCK_RANK[a] ?? 999, rb = BS_STOCK_RANK[b] ?? 999;
+  if (ra !== rb) return ra - rb;
+  return a.localeCompare(b, "ja");
+}
+
 // 項目名の表示整形
 // ① 後置修飾子「（全体）」削除
 // ② 文字列全体が(xxx)で囲まれたサブ収益 → "xxx (個別)" に変換（階層を後置で示す）
@@ -380,25 +415,48 @@ function selectShisetsu(sheetName) {
     }
   }
   renderKoumokuTabs();
-  const blocks = Object.keys(state.data.sheets[sheetName].blocks);
-  const sorted = sortItems(blocks);
-  if (sorted.length) selectKoumoku(sorted[0]);
+  // 並べ替え後の最初のタブを選択（BSは月次残高が先頭に来る）
+  const firstTab = document.querySelector("#koumoku-tabs .tab");
+  if (firstTab) selectKoumoku(firstTab.dataset.item);
 }
 
 function renderKoumokuTabs() {
   const wrap = document.getElementById("koumoku-tabs");
   wrap.innerHTML = "";
-  const blocks = Object.keys(state.data.sheets[state.shisetsu].blocks);
-  const sorted = sortItems(blocks);
-  sorted.forEach(k => {
+  const sheet = state.data.sheets[state.shisetsu];
+  const blockKeys = Object.keys(sheet.blocks);
+
+  const mkTab = (k, isAnnual) => {
     const btn = document.createElement("button");
-    btn.className = "tab";
-    btn.textContent = displayItemName(k);
-    btn.title = k;
+    btn.className = "tab" + (isAnnual ? " tab-annual" : "");
+    btn.textContent = isAnnual ? displayItemName(k) + "（年間）" : displayItemName(k);
+    btn.title = isAnnual ? k + "（決算期=年度末のみの年間値・CF計算用）" : k;
     btn.dataset.item = k;
+    btn.dataset.kind = isAnnual ? "annual" : "monthly";
     btn.addEventListener("click", () => selectKoumoku(k));
     wrap.appendChild(btn);
-  });
+  };
+
+  if (isBalanceSheet(state.shisetsu)) {
+    // BS: 空項目は非表示。月次残高(左)→年度末のみの年間/CF項目(右)に分ける
+    const monthly = [], annual = [];
+    for (const k of blockKeys) {
+      const kind = classifyBlockKind(sheet.blocks[k]);
+      if (kind === "empty") continue;
+      (kind === "annual" ? annual : monthly).push(k);
+    }
+    monthly.sort(bsStockSort).forEach(k => mkTab(k, false));
+    if (annual.length) {
+      const sep = document.createElement("span");
+      sep.className = "tab-group-sep";
+      sep.textContent = "｜決算期のみ▶";
+      wrap.appendChild(sep);
+      annual.sort((a, b) => a.localeCompare(b, "ja")).forEach(k => mkTab(k, true));
+    }
+    return;
+  }
+  // 非BS（PL等）は従来どおり
+  sortItems(blockKeys).forEach(k => mkTab(k, false));
 }
 
 function selectKoumoku(item) {
@@ -423,6 +481,11 @@ function getMatrix() {
 }
 
 function renderChartAndTable() {
+  // BSの年度末のみ項目（CF/純増減系）は月次でなく年度末値の年次推移で表示
+  if (isBalanceSheet(state.shisetsu)) {
+    const blk = state.data.sheets[state.shisetsu].blocks[state.koumoku];
+    if (classifyBlockKind(blk) === "annual") { renderAnnualItem(blk); return; }
+  }
   const matrix = getMatrix();
   const useMode = state.mode;
   const dataSeries = matrix.map(row => useMode === "cumulative" ? cumulative(row.values) : row.values);
@@ -486,6 +549,51 @@ function renderChartAndTable() {
     html += `<tr${currentClass}><td>${row.display}</td>`;
     for (const v of values) html += `<td>${fmt(v)}</td>`;
     html += `<td class="total">${fmt(sum)}</td></tr>`;
+  });
+  html += "</tbody>";
+  table.innerHTML = html;
+}
+
+// ---------- BS年度末のみ項目（CF/純増減系）の年次推移表示 ----------
+// 月次を持たない項目は、各年度の年度末値だけを年次バーで見せる（「4月しかない」誤読を防ぐ）
+function renderAnnualItem(block) {
+  // 古い→新しい順に年度末値を並べる
+  const rows = Object.keys(block)
+    .sort((a, b) => yearOrderKey(a) - yearOrderKey(b))
+    .map(y => ({ display: yearLabelDisplay(y), value: yearEndFromBlock(block, y) }))
+    .filter(r => r.value !== null);
+
+  const ctx = document.getElementById("main-chart").getContext("2d");
+  if (state.chart) state.chart.destroy();
+  const total = rows.length;
+  state.chart = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels: rows.map(r => r.display),
+      datasets: [{
+        label: "決算期（年度末）",
+        data: rows.map(r => r.value),
+        backgroundColor: rows.map((_, i) => yearColor(total - 1 - i, total)),
+        borderColor: rows.map((_, i) => yearColor(total - 1 - i, total)),
+        borderWidth: 1,
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: (ctx) => `決算期: ${fmt(ctx.parsed.y)}` } },
+      },
+      scales: { y: { ticks: { callback: (v) => v.toLocaleString("ja-JP") } } },
+    },
+  });
+
+  // 表（新→古）
+  const table = document.getElementById("main-table");
+  let html = "<thead><tr><th>年度</th><th class=\"total\">決算期（年度末）金額</th></tr></thead><tbody>";
+  rows.slice().reverse().forEach((r, i) => {
+    const cls = i === 0 ? " class=\"current\"" : "";
+    html += `<tr${cls}><td>${r.display}</td><td class="total">${fmt(r.value)}</td></tr>`;
   });
   html += "</tbody>";
   table.innerHTML = html;

@@ -305,6 +305,19 @@ body {
 .tab-row.sub .tab { font-size: 12px; padding: 8px 12px; }
 .tab-row.sub .tab.active { border-bottom-color: var(--accent); color: var(--accent); }
 
+/* BS: 年度末のみ(CF/純増減)タブは控えめに表示し、月次残高と区別 */
+.tab.tab-annual { color: #8a93a0; font-style: italic; }
+.tab.tab-annual.active { color: var(--primary); }
+.tab-group-sep {
+  flex: 0 0 auto;
+  align-self: center;
+  padding: 0 8px;
+  font-size: 11px;
+  color: #aab2bd;
+  white-space: nowrap;
+  user-select: none;
+}
+
 .chart-area {
   padding: 16px;
   border-bottom: 1px solid var(--border);
