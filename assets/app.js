@@ -600,7 +600,8 @@ function renderAnnualItem(block) {
 }
 
 // ---------- 横断ダッシュボード ----------
-// 5法人 × 2項目（経常利益・メイン収益）= 10グラフ
+// 人件費率(給与費÷収益)の分母候補（法人で収益科目名が違うので候補から自動選択）
+const RATIO_DEN = ["売上高", "純売上高", "事業収益合計", "サービス活動収益", "医業収益（全体）", "医業収益", "医療収益"];
 const DASHBOARD_SECTIONS = [
   {
     title: "①【統合】明和会＋MS",
@@ -615,7 +616,8 @@ const DASHBOARD_SECTIONS = [
     sheet: "医）明和会　全体(PL)",
     items: {
       "経常利益": ["経常利益", "経常損益"],
-      "医業収益": ["医業収益（全体）", "医業収益", "医療収益", "事業収益合計"],
+      "医療収益": ["医業収益（全体）", "医業収益", "医療収益", "事業収益合計"],
+      "人件費率(%)": { ratio: true, num: ["給与費合計"], den: RATIO_DEN },
     },
   },
   {
@@ -624,6 +626,7 @@ const DASHBOARD_SECTIONS = [
     items: {
       "経常利益": ["経常利益", "経常損益"],
       "売上高":   ["売上高", "純売上高"],
+      "人件費率(%)": { ratio: true, num: ["給与費合計"], den: RATIO_DEN },
     },
   },
   {
@@ -632,6 +635,7 @@ const DASHBOARD_SECTIONS = [
     items: {
       "経常利益": ["経常損益", "経常利益"],
       "事業収益": ["事業収益合計", "医業収益", "医療収益"],
+      "人件費率(%)": { ratio: true, num: ["給与費合計"], den: RATIO_DEN },
     },
   },
   {
@@ -640,6 +644,7 @@ const DASHBOARD_SECTIONS = [
     items: {
       "経常利益": ["経常利益", "経常損益"],
       "サービス活動収益": ["サービス活動収益", "事業収益合計"],
+      "人件費率(%)": { ratio: true, num: ["給与費合計"], den: RATIO_DEN },
     },
   },
   // 純資産推移 - 法人別4チャート分割（最重要KPI）
@@ -833,14 +838,61 @@ function renderGlobalDashboard() {
         chartsDiv.appendChild(cdiv);
         continue;
       }
-      const itemKey = findFirstItem(sheet.blocks, candidates);
-      if (!itemKey) {
-        const e = document.createElement("div");
-        e.className = "dashboard-chart-empty";
-        e.textContent = "データなし";
-        cdiv.appendChild(e);
-        chartsDiv.appendChild(cdiv);
-        continue;
+      // ratio型(人件費率など%指標) か 配列(金額) かで分岐
+      const isRatio = candidates && !Array.isArray(candidates) && candidates.ratio;
+      let years, datasets;
+      let isPercent = false;
+
+      if (isRatio) {
+        const numKey = findFirstItem(sheet.blocks, candidates.num);
+        const denKey = findFirstItem(sheet.blocks, candidates.den);
+        if (!numKey || !denKey) {
+          const e = document.createElement("div");
+          e.className = "dashboard-chart-empty";
+          e.textContent = "データなし";
+          cdiv.appendChild(e);
+          chartsDiv.appendChild(cdiv);
+          continue;
+        }
+        isPercent = true;
+        const nb = sheet.blocks[numKey], db = sheet.blocks[denKey];
+        years = Object.keys(nb).filter(y => db[y]).slice().sort((a, b) => yearOrderKey(b) - yearOrderKey(a));
+        const total = years.length;
+        // 人件費率: 単月=月給与費/月収益, 累計=累計給与費/累計収益 (ユーザー方針2026-05-27)
+        datasets = years.map((y, idx) => {
+          const na = monthArray(nb[y]), da = monthArray(db[y]);
+          let data;
+          if (dashboardMode === "cumulative") {
+            const cn = cumulative(na), cd = cumulative(da);
+            data = cn.map((v, i) => (cd[i] ? +(v / cd[i] * 100).toFixed(1) : null));
+          } else {
+            data = na.map((v, i) => (da[i] ? +(v / da[i] * 100).toFixed(1) : null));
+          }
+          return {
+            label: yearLabelDisplay(y), data,
+            backgroundColor: yearColor(idx, total), borderColor: yearColor(idx, total), borderWidth: 1,
+          };
+        });
+      } else {
+        const itemKey = findFirstItem(sheet.blocks, candidates);
+        if (!itemKey) {
+          const e = document.createElement("div");
+          e.className = "dashboard-chart-empty";
+          e.textContent = "データなし";
+          cdiv.appendChild(e);
+          chartsDiv.appendChild(cdiv);
+          continue;
+        }
+        const block = sheet.blocks[itemKey];
+        years = Object.keys(block).slice().sort((a, b) => yearOrderKey(b) - yearOrderKey(a));
+        const total = years.length;
+        datasets = years.map((y, idx) => ({
+          label: yearLabelDisplay(y),
+          data: dashboardMode === "cumulative" ? cumulative(monthArray(block[y])) : monthArray(block[y]),
+          backgroundColor: yearColor(idx, total),
+          borderColor: yearColor(idx, total),
+          borderWidth: 1,
+        }));
       }
 
       const wrap = document.createElement("div");
@@ -850,17 +902,6 @@ function renderGlobalDashboard() {
       cdiv.appendChild(wrap);
       chartsDiv.appendChild(cdiv);
 
-      // データ準備
-      const block = sheet.blocks[itemKey];
-      const years = Object.keys(block).slice().sort((a, b) => yearOrderKey(b) - yearOrderKey(a));
-      const total = years.length;
-      const datasets = years.map((y, idx) => ({
-        label: yearLabelDisplay(y),
-        data: dashboardMode === "cumulative" ? cumulative(monthArray(block[y])) : monthArray(block[y]),
-        backgroundColor: yearColor(idx, total),
-        borderColor: yearColor(idx, total),
-        borderWidth: 1,
-      }));
       // 月ラベル: このシート/グラフ用に判定
       const sheetMonthStart = detectSheetMonthStart(sheet);
       const sheetMonthLabels = getMonthLabels(sheetMonthStart);
@@ -874,12 +915,13 @@ function renderGlobalDashboard() {
           plugins: {
             legend: { display: false },
             tooltip: {
-              callbacks: { label: (ctx) => `${ctx.dataset.label}: ${fmt(ctx.parsed.y)}` },
+              callbacks: { label: (ctx) => isPercent ? `${ctx.dataset.label}: ${ctx.parsed.y}%` : `${ctx.dataset.label}: ${fmt(ctx.parsed.y)}` },
             },
           },
           scales: {
             x: { ticks: { font: { size: 9 } } },
-            y: { ticks: { font: { size: 9 }, callback: v => v.toLocaleString("ja-JP") } },
+            // 人件費率(%)はY軸下限も自動（データmin付近）＝変動を拡大表示。金額は0始まり
+            y: { beginAtZero: !isPercent, ticks: { font: { size: 9 }, callback: v => isPercent ? v + "%" : v.toLocaleString("ja-JP") } },
           },
         },
       });
