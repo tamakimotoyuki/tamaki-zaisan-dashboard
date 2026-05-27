@@ -240,6 +240,20 @@ body {
   padding-bottom: 8px;
   border-bottom: 1px solid var(--border);
 }
+/* サブ見出しがある時はh2の区切り線をサブ側に移す（タイトル＝太字のみ／詳細＝小字） */
+.dashboard-section h2:has(+ .dash-sub) {
+  margin-bottom: 2px;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+.dash-sub {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-sub);
+  margin: 0 0 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
 .dashboard-charts {
   display: grid;
   grid-template-columns: repeat(2, 1fr);

@@ -652,7 +652,8 @@ const DASHBOARD_SECTIONS = [
   },
   // 純資産推移 - 法人別4チャート分割（最重要KPI）
   {
-    title: "⑥純資産推移（4法人別BS・年度末残高）",
+    title: "⑥純資産推移",
+    sub: "4法人別BS・年度末残高",
     sheet: null,
     isBS: true,
     bsSheets: {
@@ -669,7 +670,8 @@ const DASHBOARD_SECTIONS = [
   },
   // 現預金推移 - 法人別4チャート分割（流動性KPI）
   {
-    title: "⑦現預金推移（4法人別BS・年度末残高）",
+    title: "⑦現預金推移",
+    sub: "4法人別BS・年度末残高",
     sheet: null,
     isBS: true,
     bsSheets: {
@@ -686,7 +688,8 @@ const DASHBOARD_SECTIONS = [
   },
   // 長期借入金推移 - 法人別4チャート分割（データ欠損は0扱い）
   {
-    title: "⑧長期借入金推移（4法人別BS・年度末残高）",
+    title: "⑧長期借入金推移",
+    sub: "4法人別BS・年度末残高",
     sheet: null,
     isBS: true,
     bsSheets: {
@@ -706,7 +709,8 @@ const DASHBOARD_SECTIONS = [
   },
   // 有形固定資産推移 - 法人別4チャート分割（設備投資の累計）
   {
-    title: "⑨有形固定資産推移（4法人別BS・年度末残高）",
+    title: "⑨有形固定資産推移",
+    sub: "4法人別BS・年度末残高",
     sheet: null,
     isBS: true,
     bsSheets: {
@@ -725,7 +729,8 @@ const DASHBOARD_SECTIONS = [
   },
   // 減価償却費推移 - 法人別4チャート分割（PL年度合計）
   {
-    title: "⑩減価償却費推移（4法人別PL・月次タイムライン・年合計÷12）",
+    title: "⑩減価償却費推移",
+    sub: "4法人別PL・月次（年合計÷12）",
     isPL: true,
     houjinSheets: {
       "（医）明和会": "医）明和会　全体(PL)",
@@ -740,7 +745,8 @@ const DASHBOARD_SECTIONS = [
   },
   // 簡易営業CF (経常利益 + 減価償却費) - 法人別4チャート・スタック
   {
-    title: "⑪簡易営業CF推移（経常利益+減価償却費・月次・年度比較）",
+    title: "⑪簡易営業CF推移",
+    sub: "経常利益＋減価償却費・月次・年度比較",
     isStackedPL: true,
     houjinSheets: {
       "（医）明和会": "医）明和会　全体(PL)",
@@ -756,7 +762,8 @@ const DASHBOARD_SECTIONS = [
   },
   // 簡易キャッシュフロー (営業/投資/財務) - 法人別4チャート
   {
-    title: "⑫簡易キャッシュフロー推移（営業/投資/財務・年度概算）",
+    title: "⑫簡易キャッシュフロー推移",
+    sub: "営業/投資/財務・年度概算",
     isCF: true,
     minYear: "R2",  // R2以降に統一
     houjinPlSheets: {
@@ -775,6 +782,19 @@ const DASHBOARD_SECTIONS = [
 ];
 
 let dashboardMode = "monthly"; // monthly | cumulative
+
+// セクション見出し：短い<h2>＋詳細は小字サブ（projector/印刷でも読めるよう常時表示・控えめ）
+function appendSectionHeader(sec, section) {
+  const h = document.createElement("h2");
+  h.textContent = section.title;
+  sec.appendChild(h);
+  if (section.sub) {
+    const s = document.createElement("div");
+    s.className = "dash-sub";
+    s.textContent = section.sub;
+    sec.appendChild(s);
+  }
+}
 
 const dashboardCharts = [];  // Chart instance管理
 
@@ -818,9 +838,7 @@ function renderGlobalDashboard() {
     const sheet = state.data.sheets[section.sheet];
     const sec = document.createElement("section");
     sec.className = "dashboard-section";
-    const h = document.createElement("h2");
-    h.textContent = section.title;
-    sec.appendChild(h);
+    appendSectionHeader(sec, section);
     const chartsDiv = document.createElement("div");
     chartsDiv.className = "dashboard-charts";
     sec.appendChild(chartsDiv);
@@ -940,9 +958,7 @@ function renderGlobalDashboard() {
 function renderBSDashboardSection(grid, section) {
   const sec = document.createElement("section");
   sec.className = "dashboard-section";
-  const h = document.createElement("h2");
-  h.textContent = section.title;
-  sec.appendChild(h);
+  appendSectionHeader(sec, section);
   const chartsDiv = document.createElement("div");
   chartsDiv.className = "dashboard-charts";
   sec.appendChild(chartsDiv);
@@ -1231,9 +1247,7 @@ function extractHoujinYearEnd(bsSheets, itemKey) {
 function renderPLAnnualSection(grid, section) {
   const sec = document.createElement("section");
   sec.className = "dashboard-section";
-  const h = document.createElement("h2");
-  h.textContent = section.title;
-  sec.appendChild(h);
+  appendSectionHeader(sec, section);
   const chartsDiv = document.createElement("div");
   chartsDiv.className = "dashboard-charts";
   sec.appendChild(chartsDiv);
@@ -1341,9 +1355,7 @@ function renderPLAnnualSection(grid, section) {
 function renderStackedPLSection(grid, section) {
   const sec = document.createElement("section");
   sec.className = "dashboard-section";
-  const h = document.createElement("h2");
-  h.textContent = section.title;
-  sec.appendChild(h);
+  appendSectionHeader(sec, section);
   const chartsDiv = document.createElement("div");
   chartsDiv.className = "dashboard-charts";
   sec.appendChild(chartsDiv);
@@ -1477,9 +1489,7 @@ function renderStackedPLSection(grid, section) {
 function renderCFSection(grid, section) {
   const sec = document.createElement("section");
   sec.className = "dashboard-section";
-  const h = document.createElement("h2");
-  h.textContent = section.title;
-  sec.appendChild(h);
+  appendSectionHeader(sec, section);
 
   // 注記
   const note = document.createElement("p");
@@ -1661,9 +1671,7 @@ function renderCFSection(grid, section) {
 function renderBorrowFlowSection(grid, section) {
   const sec = document.createElement("section");
   sec.className = "dashboard-section";
-  const h = document.createElement("h2");
-  h.textContent = section.title;
-  sec.appendChild(h);
+  appendSectionHeader(sec, section);
   const note = document.createElement("p");
   note.style.cssText = "color:#666;font-size:11px;margin:4px 0 8px;";
   note.textContent = "※PCA仕訳明細(InputSlip)のDr/Cr分離で取得。新規借入(+)=期中の借入実行額、返済(−)=期中の返済額。短期+長期を合算。BS残高差分では見えない『借り換え』も把握できる。";
