@@ -414,6 +414,9 @@ function selectShisetsu(sheetName) {
       toggleWrap.style.display = "";
     }
   }
+  // ★トグルradioの見た目を state.mode に同期（施設切替=特にBS→PLでのズレ防止・2026-05-28）
+  const modeRadio = document.querySelector(`#page-dashboard input[name="mode"][value="${state.mode}"]`);
+  if (modeRadio) modeRadio.checked = true;
   renderKoumokuTabs();
   // 並べ替え後の最初のタブを選択（BSは月次残高が先頭に来る）
   const firstTab = document.querySelector("#koumoku-tabs .tab");
