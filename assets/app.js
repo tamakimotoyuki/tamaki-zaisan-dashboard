@@ -1822,12 +1822,31 @@ function logout() {
   showPage("page-login");
 }
 
+// データ正規化：ブロック内に紛れ込んだ非年度キー（"_"始まり: __meta__ 等の出所メタ）を除去。
+// 年度列挙（getMatrix等）は block のキーを全て年度として扱うため、ブロック直下のメタが
+// 「__meta__」という空の年度系列として凡例・表に出てしまうのを防ぐ防御線（データ側の根治と二重化）。
+function sanitizeData(data) {
+  if (!data || !data.sheets) return;
+  for (const sheet of Object.values(data.sheets)) {
+    const blocks = sheet && sheet.blocks;
+    if (!blocks) continue;
+    for (const block of Object.values(blocks)) {
+      if (block && typeof block === "object" && !Array.isArray(block)) {
+        for (const k of Object.keys(block)) {
+          if (k.startsWith("_")) delete block[k];
+        }
+      }
+    }
+  }
+}
+
 // ---------- 起動 ----------
 async function init() {
   // データ読み込み
   try {
     const res = await fetch(DATA_URL);
     state.data = await res.json();
+    sanitizeData(state.data);
   } catch (e) {
     alert("データ読み込みに失敗しました: " + e.message);
     return;
