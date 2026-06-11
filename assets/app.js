@@ -325,10 +325,36 @@ const state = {
   chart: null,
 };
 
+// ---------- View Transitions ヘルパー ----------
+// 画面・タブ・単月/累積の切替を上品なクロスフェードにする。
+// rootのみ（view-transition-name を付けない）＝重複リスクなし。グラフは Chart.js animation:false の静止canvas＝フェードで滲まない。
+// 非対応ブラウザ／OSの「動きを減らす」設定では updateFn をそのまま実行＝アニメ無しで普通に動く（検出ガード必須）。
+// 規約・落とし穴の正本: 【デザイン】/view-transitions.md ／ ui-patterns.md §6-B
+// 連続で startViewTransition を呼ぶと前の遷移が中断され InvalidStateError が出る。
+// 画面表示前の下準備（オフスクリーン描画）では遷移を抑止し、見える切替だけを1回アニメさせる。
+let suppressVT = false;
+function withViewTransition(updateFn) {
+  const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (document.startViewTransition && !reduce && !suppressVT) {
+    const t = document.startViewTransition(updateFn);
+    // 遷移は“装飾”として扱う：中断（連続呼び出しでの abort）・name重複などで ready/finished が
+    // reject してもアプリに影響させない（DOM更新=updateFn は既に完了している）。
+    // これを握りつぶさないと InvalidStateError 等が未処理 rejection としてコンソールに出る。
+    if (t) {
+      if (t.ready) t.ready.catch(() => {});
+      if (t.finished) t.finished.catch(() => {});
+    }
+  } else {
+    updateFn();
+  }
+}
+
 // ---------- 画面切替 ----------
 function showPage(id) {
-  document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
-  document.getElementById(id).classList.add("active");
+  withViewTransition(() => {
+    document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
+    document.getElementById(id).classList.add("active");
+  });
 }
 
 // ---------- 法人選択画面 ----------
@@ -353,7 +379,7 @@ function bindHoujinButtons() {
   document.querySelectorAll('input[name="dashboard-mode"]').forEach(r => {
     r.addEventListener("change", (e) => {
       dashboardMode = e.target.value;
-      renderGlobalDashboard();
+      withViewTransition(renderGlobalDashboard);
     });
   });
   document.getElementById("back-to-houjin-from-dashboard").addEventListener("click", () => {
@@ -371,10 +397,13 @@ function enterHoujin(houjin) {
   state.shisetsu = null;
   state.koumoku = null;
   document.getElementById("houjin-name").textContent = HOUJIN_LABELS[houjin];
+  // 表示前の下準備は遷移させない（showPage の1回だけアニメ）＝二重遷移による中断を防ぐ
+  suppressVT = true;
   renderShisetsuTabs();
   // 最初の施設を選択
   const sheets = HOUJIN_SHEETS[houjin].filter(s => state.data.sheets[s] && !DASHBOARD_ONLY_SHEETS.has(s));
   if (sheets.length) selectShisetsu(sheets[0]);
+  suppressVT = false;
   showPage("page-dashboard");
 }
 
@@ -484,6 +513,9 @@ function getMatrix() {
 }
 
 function renderChartAndTable() {
+  withViewTransition(renderChartAndTableBody);
+}
+function renderChartAndTableBody() {
   // BSの年度末のみ項目（CF/純増減系）は月次でなく年度末値の年次推移で表示
   if (isBalanceSheet(state.shisetsu)) {
     const blk = state.data.sheets[state.shisetsu].blocks[state.koumoku];

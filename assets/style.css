@@ -437,3 +437,18 @@ body {
   .powered-by { font-size: 10px; padding: 3px 8px 3px 10px; right: 8px; bottom: 8px; }
   .powered-by img { width: 16px; height: 16px; }
 }
+
+/* ===== View Transitions（画面・タブ・単月/累積の切替を上品にクロスフェード） =====
+   実装は app.js: withViewTransition()。規約の正本＝【デザイン】/view-transitions.md ・ ui-patterns.md §6-B
+   root のみ（要素に view-transition-name を付けない）＝重複リスクなし。グラフは静止canvasなのでフェードで滲まない。 */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: .3s;            /* 控えめ・短い（§6-B: 0.28-0.34s） */
+  animation-timing-function: ease;
+}
+/* OSの「動きを減らす」設定では完全に無効化（必須・高齢ユーザー/前庭障害配慮 WCAG2.2 SC2.3.3） */
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) { animation: none !important; }
+}
