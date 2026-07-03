@@ -147,23 +147,35 @@ const ITEM_ORDER = [
   "設備関係費合計",
   "(水道光熱費)",
   "減価償却費",
+  "研究研修費合計",
+  // ④' 社福会計の費用群（社会福祉法人会計基準・2026-07-04 追加）
+  "サービス活動費用計",
+  "事業費",
+  "事務費",
 
   // ⑤ 事業損益（xlsx R458）
   "事業損益",
+  "サービス活動増減差額",
 
   // ⑥ 事業外（xlsx R496→R534）
   "事業外収益",
   "事業外費用",
+  "サービス活動外収益",
+  "サービス活動外費用",
 
   // ⑦ 特別損益（xlsx R572→R610）
   "特別利益",
   "特別損失",
+  "特別収益",
+  "特別費用",
 
   // ⑧ 最終（xlsx R648→R686）
   "税引前当期純利益",
   "税引前当期純損益",
+  "法人税等",
   "当期純利益",
   "当期純損益",
+  "当期活動増減差額",
 ];
 const ITEM_RANK = Object.fromEntries(ITEM_ORDER.map((k, i) => [k, i]));
 
@@ -202,7 +214,9 @@ function classifyBlockKind(block) {
 // BS月次残高項目の表示順（資産→負債→純資産。リスト外は五十音）
 const BS_STOCK_ORDER = [
   "現預金", "医業未収金", "棚卸資産", "有形固定資産（簿価）",
+  "その他の固定資産", "基本財産",  // 社福BS（資産・2026-07-04 追加）
   "未払金・未払費用", "短期借入金", "長期借入金", "純資産",
+  "基本金", "国庫補助金等特別積立金", "次期繰越活動増減差額",  // 社福BS（純資産の部・2026-07-04 追加）
 ];
 const BS_STOCK_RANK = Object.fromEntries(BS_STOCK_ORDER.map((k, i) => [k, i]));
 function bsStockSort(a, b) {
@@ -462,8 +476,13 @@ function renderKoumokuTabs() {
   const mkTab = (k, isAnnual) => {
     const btn = document.createElement("button");
     btn.className = "tab" + (isAnnual ? " tab-annual" : "");
-    btn.textContent = isAnnual ? displayItemName(k) + "（年間）" : displayItemName(k);
-    btn.title = isAnnual ? k + "（決算期=年度末のみの年間値・CF計算用）" : k;
+    // ★年度末のみ値を持つ項目でも、bs_items名簿にあるものはストック（残高）＝「年度末残高」表記。
+    //   「（年間）」はフロー（_純増減/_新規借入/_返済等）のみ（2026-07-04 監査修正）
+    const isStock = isAnnual && (state.data.bs_items || []).includes(k);
+    btn.textContent = isAnnual ? displayItemName(k) + (isStock ? "（年度末残高）" : "（年間）") : displayItemName(k);
+    btn.title = isAnnual
+      ? k + (isStock ? "（年度末残高＝ストック値）" : "（決算期=年度末のみの年間値・CF計算用）")
+      : k;
     btn.dataset.item = k;
     btn.dataset.kind = isAnnual ? "annual" : "monthly";
     btn.addEventListener("click", () => selectKoumoku(k));
@@ -575,10 +594,15 @@ function renderChartAndTableBody() {
   const table = document.getElementById("main-table");
   let html = "<thead><tr><th>年度</th>";
   for (const m of monthLabels) html += `<th>${m}</th>`;
-  html += `<th class="total">${useMode === "cumulative" ? "累計" : "金額"}</th></tr></thead><tbody>`;
+  // ★BSのストック項目（長期借入金・現預金等＝月末残高）は12ヶ月合計が無意味（残高が約12倍に見える）
+  //   → 右端列は「期末残高」＝最後の入力月の残高を出す（2026-07-04 田蒔さん指摘で修正）
+  //   フロー項目（_新規借入/_返済/_純増減）は年間合計が正しいので従来どおり
+  const isBsStock = isBalanceSheet(state.shisetsu) && !/_(新規借入|返済|純増減)$/.test(state.koumoku);
+  const totalHeader = useMode === "cumulative" ? "累計" : (isBsStock ? "期末残高" : "年間合計");
+  html += `<th class="total">${totalHeader}</th></tr></thead><tbody>`;
   matrix.forEach((row, i) => {
     const values = dataSeries[i];
-    const sum = useMode === "cumulative"
+    const sum = (useMode === "cumulative" || isBsStock)
       ? values.filter(v => v !== null).slice(-1)[0] ?? null
       : row.values.reduce((a, b) => a + (b || 0), 0);
     const currentClass = i === 0 ? " class=\"current\"" : "";
@@ -1008,9 +1032,8 @@ function renderBSDashboardSection(grid, section) {
       for (const blockKey of Object.keys(sheet.blocks)) {
         const block = sheet.blocks[blockKey] || {};
         for (const yearLabel of Object.keys(block)) {
-          const months = block[yearLabel] || {};
-          const monthKeys = Object.keys(months).filter(k => /^\d+$/.test(k));
-          if (monthKeys.length > 0) ys.add(yearLabel);
+          // ★fillZero補完の対象年度も完結年度に限定（進行中年度にR8=0の偽点を作らない・2026-07-04）
+          if (yearEndFromBlock(block, yearLabel) !== null) ys.add(yearLabel);
         }
       }
     }
@@ -1028,12 +1051,9 @@ function renderBSDashboardSection(grid, section) {
       houjinData[houjinLabel] = {};
       const block = sheet?.blocks?.[itemKey] || {};
       for (const yearLabel of Object.keys(block)) {
-        const months = block[yearLabel] || {};
-        const monthKeys = Object.keys(months).filter(k => /^\d+$/.test(k));
-        if (monthKeys.length === 0) continue;
-        const maxKey = Math.max(...monthKeys.map(Number));
-        const yearEnd = months[String(maxKey)];
-        if (typeof yearEnd === "number") {
+        // ★完結年度（月11あり）のみ採用＝進行中年度の途中残高を年度末扱いしない（2026-07-04）
+        const yearEnd = yearEndFromBlock(block, yearLabel);
+        if (yearEnd !== null) {
           houjinData[houjinLabel][yearLabel] = yearEnd;
           allYears.add(yearLabel);
         }
@@ -1229,16 +1249,17 @@ function depreciationMonthlyArray(block, year) {
     }
   }
   if (!any) return arr;
-  const isLump = sumAbs > 0 && (nonZero <= 1 || (lastAbs / sumAbs) >= 0.5);
-  if (isLump) return new Array(12).fill(annual / 12);  // 旧年度: ÷12で均す
-  return arr;  // 新年度: 実月次
+  // ★一括判定は「非ゼロが年度末月(m=11)に載っている」ことを要求（2026-07-04 修正）。
+  //   進行中年度（期首1ヶ月だけ実月次が入った状態）を一括と誤判定して÷12スミアしない。
+  const isLump = sumAbs > 0 && ((nonZero <= 1 && lastAbs > 0) || (lastAbs / sumAbs) >= 0.5);
+  if (isLump) return new Array(12).fill(annual / 12);  // 旧年度: 年度末一括計上→÷12で均す
+  return arr;  // 新年度・進行中年度: 実月次
 }
 function yearEndFromBlock(block, year) {
-  const months = block?.[year] || {};
-  const keys = Object.keys(months).filter(k => /^\d+$/.test(k));
-  if (keys.length === 0) return null;
-  const maxKey = Math.max(...keys.map(Number));
-  const v = months[String(maxKey)];
+  // ★年度末値＝月11（期末月）に限定（2026-07-04 修正）。
+  //   進行中年度（例: 5月末までしか無いR8）の途中残高を「年度末残高」として
+  //   完結年度と同格に描画しない（BS年次チャート・CF・年間項目表示すべてに効く）。
+  const v = block?.[year]?.["11"];
   return typeof v === "number" ? v : null;
 }
 function extractHoujinAnnualSum(houjinSheets, candidates) {
@@ -1828,13 +1849,22 @@ function logout() {
 // 「__meta__」という空の年度系列として凡例・表に出てしまうのを防ぐ防御線（データ側の根治と二重化）。
 function sanitizeData(data) {
   if (!data || !data.sheets) return;
-  for (const sheet of Object.values(data.sheets)) {
+  for (const [sheetName, sheet] of Object.entries(data.sheets)) {
     const blocks = sheet && sheet.blocks;
     if (!blocks) continue;
+    // ★社福シートは千円単位で格納（データ契約＝パイプライン説明書）。他3法人は円。
+    //   読み込み時にここで一度だけ×1000して全表示を円に統一する（2026-07-04 単位混在監査で修正）。
+    //   二重変換禁止＝変換はこの一箇所のみ。データファイル自体は千円のまま（契約不変）。
+    const isSenYen = sheetName.startsWith("社福");
     for (const block of Object.values(blocks)) {
       if (block && typeof block === "object" && !Array.isArray(block)) {
         for (const k of Object.keys(block)) {
-          if (k.startsWith("_")) delete block[k];
+          if (k.startsWith("_")) { delete block[k]; continue; }
+          if (isSenYen && block[k] && typeof block[k] === "object") {
+            for (const m of Object.keys(block[k])) {
+              if (typeof block[k][m] === "number") block[k][m] *= 1000;
+            }
+          }
         }
       }
     }
