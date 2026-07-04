@@ -1032,8 +1032,9 @@ function renderBSDashboardSection(grid, section) {
       for (const blockKey of Object.keys(sheet.blocks)) {
         const block = sheet.blocks[blockKey] || {};
         for (const yearLabel of Object.keys(block)) {
-          // ★fillZero補完の対象年度も完結年度に限定（進行中年度にR8=0の偽点を作らない・2026-07-04）
-          if (yearEndFromBlock(block, yearLabel) !== null) ys.add(yearLabel);
+          const months = block[yearLabel] || {};
+          const monthKeys = Object.keys(months).filter(k => /^\d+$/.test(k));
+          if (monthKeys.length > 0) ys.add(yearLabel);
         }
       }
     }
@@ -1045,17 +1046,25 @@ function renderBSDashboardSection(grid, section) {
     const fillZero = fillZeroItems.has(label);
     // 全法人で利用可能な年度ラベルを収集
     const allYears = new Set();
-    const houjinData = {}; // houjinLabel -> {year -> value (年度末月)}
+    const houjinData = {}; // houjinLabel -> {year -> value (最新月末残高)}
+    const interimNote = {}; // houjinLabel -> ["R8=5月末", ...]（進行中年度の時点注記・2026-07-04）
     for (const [houjinLabel, sheetName] of Object.entries(section.bsSheets)) {
       const sheet = state.data.sheets[sheetName];
       houjinData[houjinLabel] = {};
+      const startM = detectSheetMonthStart(sheet) || 4;
       const block = sheet?.blocks?.[itemKey] || {};
       for (const yearLabel of Object.keys(block)) {
-        // ★完結年度（月11あり）のみ採用＝進行中年度の途中残高を年度末扱いしない（2026-07-04）
-        const yearEnd = yearEndFromBlock(block, yearLabel);
-        if (yearEnd !== null) {
-          houjinData[houjinLabel][yearLabel] = yearEnd;
+        // ★進行中年度も表示する（1ヶ月分でも進捗の目安・田蒔さん方針 2026-07-04）。
+        //   ただし「年度末」と偽らず、タイトルに「R8=5月末時点」を注記する
+        const info = yearLatestFromBlock(block, yearLabel);
+        if (info) {
+          houjinData[houjinLabel][yearLabel] = info.v;
           allYears.add(yearLabel);
+          if (info.mIdx < 11) {
+            const calM = ((info.mIdx + startM - 1) % 12) + 1;
+            (interimNote[houjinLabel] = interimNote[houjinLabel] || []).push(
+              `${yearLabelDisplay(yearLabel)}=${calM}月末`);
+          }
         }
       }
       // 欠損→0補完: その法人が他BS項目で持っている年度に値がなければ0扱い
@@ -1095,7 +1104,9 @@ function renderBSDashboardSection(grid, section) {
         cdiv.className = "dashboard-chart";
         const t = document.createElement("div");
         t.className = "dashboard-chart-title";
-        t.textContent = `${label} - ${hLabel}（年度末月末残高）`;
+        // 進行中年度がある法人は「R8=5月末時点」を明記（年度末と偽らない・2026-07-04）
+        const notes = interimNote[hLabel] ? [...new Set(interimNote[hLabel])].join("・") : "";
+        t.textContent = `${label} - ${hLabel}（年度末月末残高${notes ? `／進行中 ${notes}時点` : ""}）`;
         cdiv.appendChild(t);
         const wrap = document.createElement("div");
         wrap.className = "dashboard-chart-canvas";
@@ -1256,11 +1267,19 @@ function depreciationMonthlyArray(block, year) {
   return arr;  // 新年度・進行中年度: 実月次
 }
 function yearEndFromBlock(block, year) {
-  // ★年度末値＝月11（期末月）に限定（2026-07-04 修正）。
-  //   進行中年度（例: 5月末までしか無いR8）の途中残高を「年度末残高」として
-  //   完結年度と同格に描画しない（BS年次チャート・CF・年間項目表示すべてに効く）。
+  // ★年度末値＝月11（期末月）に限定（2026-07-04）。年度末のみ項目（renderAnnualItem）用＝
+  //   進行中年度に意味のない0行を出さない。
   const v = block?.[year]?.["11"];
   return typeof v === "number" ? v : null;
+}
+// ★進行中年度も含めた「最新月末値」（2026-07-04 田蒔さん方針＝1ヶ月分でも進捗の目安として表示する）。
+//   mIdx を返すので呼び出し側は「R8=5月末時点」等の注記を付けられる（年度末と偽らない）。
+function yearLatestFromBlock(block, year) {
+  const months = block?.[year] || {};
+  const keys = Object.keys(months).filter(k => /^\d+$/.test(k) && typeof months[k] === "number");
+  if (!keys.length) return null;
+  const maxKey = Math.max(...keys.map(Number));
+  return { v: months[String(maxKey)], mIdx: maxKey };
 }
 function extractHoujinAnnualSum(houjinSheets, candidates) {
   // returns {houjinLabel -> {year -> annualSum}}, allYears Set
@@ -1281,6 +1300,7 @@ function extractHoujinAnnualSum(houjinSheets, candidates) {
   return { result, allYears };
 }
 function extractHoujinYearEnd(bsSheets, itemKey) {
+  // ★進行中年度も最新月末値で含める（CFは「期首→最新月末」の部分期間として内的整合・2026-07-04）
   const result = {};
   const allYears = new Set();
   for (const [hLabel, sheetName] of Object.entries(bsSheets)) {
@@ -1289,8 +1309,8 @@ function extractHoujinYearEnd(bsSheets, itemKey) {
     if (!sheet?.blocks?.[itemKey]) continue;
     const block = sheet.blocks[itemKey];
     for (const y of Object.keys(block)) {
-      const v = yearEndFromBlock(block, y);
-      if (v !== null) { result[hLabel][y] = v; allYears.add(y); }
+      const info = yearLatestFromBlock(block, y);
+      if (info) { result[hLabel][y] = info.v; allYears.add(y); }
     }
   }
   return { result, allYears };
@@ -1555,7 +1575,7 @@ function renderCFSection(grid, section) {
     "&nbsp;&nbsp;&nbsp;+ Δ未払金 ± Δその他運転資本(前払/前受/預り金/未収入金等)<br>" +
     "<b>投資CF</b> = −(Δ有形固定資産簿価 + 減価償却費) − Δ投資その他資産(出資金/敷金/無形等) + 固定資産売却益<br>" +
     "<b>財務CF</b> = Δ長期借入金 + Δ短期借入金 − Δ役員貸付金 − Δ関係会社債権 + Δ関係会社債務<br>" +
-    "<span style='color:#999'>※引当金・運転資本変動はPCA仕訳明細(InputSlip)から取得。R7末は決算未確定のため参考値。</span>";
+    "<span style='color:#999'>※引当金・運転資本変動はPCA仕訳明細(InputSlip)から取得。R7末は決算未確定のため参考値。進行中年度（R8等）は期首→入力済み最新月末までの部分期間値。</span>";
   sec.appendChild(note);
 
   const chartsDiv = document.createElement("div");
