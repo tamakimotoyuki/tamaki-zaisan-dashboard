@@ -314,9 +314,15 @@ function monthArray(yearDict) {
 
 // 累積化
 function cumulative(arr) {
+  // ★末尾のnull連続（進行中年度の未入力月）には累計を延ばさない（2026-07-04 修正）。
+  //   従来は最後の累計値が12月まで繰り返され「年度が着地済み」に見えた。
+  //   途中の穴（散発項目のnull月）は従来どおり累計を維持する。
+  let lastIdx = -1;
+  arr.forEach((v, i) => { if (v !== null) lastIdx = i; });
   let acc = 0;
   let started = false;
-  return arr.map(v => {
+  return arr.map((v, i) => {
+    if (i > lastIdx) return null;          // 未入力の未来月
     if (v === null && !started) return null;
     started = true;
     acc += (v || 0);
@@ -476,9 +482,10 @@ function renderKoumokuTabs() {
   const mkTab = (k, isAnnual) => {
     const btn = document.createElement("button");
     btn.className = "tab" + (isAnnual ? " tab-annual" : "");
-    // ★年度末のみ値を持つ項目でも、bs_items名簿にあるものはストック（残高）＝「年度末残高」表記。
-    //   「（年間）」はフロー（_純増減/_新規借入/_返済等）のみ（2026-07-04 監査修正）
-    const isStock = isAnnual && (state.data.bs_items || []).includes(k);
+    // ★年度末のみ値を持つ項目でも、ストック（残高）は「年度末残高」表記。
+    //   判定はBS表右端(L600相当)と同じ名前サフィックス方式に統一（bs_items名簿は退役スクリプト
+    //   由来で社福5項目が漏れており二重基準になるため不使用・2026-07-04 検証指摘で統一）
+    const isStock = isAnnual && !/_(新規借入|返済|純増減)$/.test(k);
     btn.textContent = isAnnual ? displayItemName(k) + (isStock ? "（年度末残高）" : "（年間）") : displayItemName(k);
     btn.title = isAnnual
       ? k + (isStock ? "（年度末残高＝ストック値）" : "（決算期=年度末のみの年間値・CF計算用）")
